@@ -1,0 +1,35 @@
+# uv
+.venv/
+uv.lock
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Ruff
+.ruff_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Fichiers utilisateur / outputs temporaires
+*.mov
+*.gif
+!tests/fixtures/*.mov
+tmp/
+output/
