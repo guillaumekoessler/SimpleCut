@@ -8,3 +8,4 @@ class UploadedVideo:
 
     path: Path
     duration: float
+    file_id: str

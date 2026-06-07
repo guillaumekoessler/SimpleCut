@@ -11,19 +11,7 @@ from moviepy import VideoFileClip
 from utils.VideoClasses import UploadedVideo
 
 
-def video_uploader(
-    label: str = "Importez votre vidéo",
-) -> UploadedVideo | None:
-    uploaded_file = st.file_uploader(
-        label,
-        type="video/*",
-        accept_multiple_files=False,
-        label_visibility="collapsed",
-    )
-
-    if uploaded_file is None:
-        return None
-
+def _build_uploaded_video(uploaded_file) -> UploadedVideo:
     with tempfile.NamedTemporaryFile(delete=False) as tmp_video:
         tmp_video.write(uploaded_file.read())
         video_path = Path(tmp_video.name)
@@ -31,7 +19,44 @@ def video_uploader(
     with VideoFileClip(str(video_path)) as clip:
         duration = float(clip.duration)
 
-    return UploadedVideo(path=video_path, duration=duration)
+    return UploadedVideo(
+        path=video_path,
+        duration=duration,
+        file_id=uploaded_file.file_id,
+    )
+
+
+def video_uploader(
+    label: str = "Importez votre vidéo",
+) -> UploadedVideo | None:
+    seed = st.session_state.get("uploader_seed", 0)
+    uploaded_file = st.file_uploader(
+        label,
+        type="video/*",
+        accept_multiple_files=False,
+        label_visibility="collapsed",
+        key=f"home_video_uploader_{seed}",
+    )
+
+    cached: UploadedVideo | None = st.session_state.get("uploaded_video")
+
+    if uploaded_file is None:
+        return cached
+
+    if cached is not None and cached.file_id == uploaded_file.file_id:
+        return cached
+
+    if cached is not None:
+        cached.path.unlink(missing_ok=True)
+
+    return _build_uploaded_video(uploaded_file)
+
+
+def remove_video() -> None:
+    cached: UploadedVideo | None = st.session_state.pop("uploaded_video", None)
+    if cached is not None:
+        cached.path.unlink(missing_ok=True)
+    st.session_state.uploader_seed = st.session_state.get("uploader_seed", 0) + 1
 
 
 # ---------------------------------------------------------------------------
@@ -48,24 +73,20 @@ with st.container(border=True):
     st.caption("IMPORT")
     video = video_uploader()
 
-# ---------------------------------------------------------------------------
-# Synchronisation avec st.session_state + rerun déclencheur de la nav
-# ---------------------------------------------------------------------------
 if video is not None:
     first_upload = st.session_state.get("uploaded_video") is None
     st.session_state.uploaded_video = video
     if first_upload:
         st.rerun()
-elif st.session_state.get("uploaded_video") is not None:
-    del st.session_state.uploaded_video
-    st.rerun()
 
 # ---------------------------------------------------------------------------
-# Main content (after upload)
+# Preview + remove
 # ---------------------------------------------------------------------------
-if video is not None:
+current: UploadedVideo | None = st.session_state.get("uploaded_video")
+if current is not None:
     with st.container(border=True):
         st.caption("APERÇU")
-        st.video(str(video.path))
+        st.video(str(current.path))
+        st.button("Supprimer la vidéo", on_click=remove_video)
 else:
     st.info("Importez une vidéo pour commencer.", icon="🎬")
