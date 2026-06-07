@@ -23,6 +23,11 @@ htmlcov/
 .idea/
 *.swp
 
+# Claude Code (local settings, historique, mémoires perso)
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+
 # OS
 .DS_Store
 Thumbs.db
