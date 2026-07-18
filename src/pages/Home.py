@@ -62,22 +62,43 @@ def video_uploader(
     if cached is not None and cached.file_id == uploaded_file.file_id:
         return cached
 
+    with st.spinner("Analyse de la vidéo…"):
+        new_video = _build_uploaded_video(uploaded_file)
+
+    if new_video is None:
+        # Échec de lecture : on conserve la vidéo précédente telle quelle.
+        return cached
+
+    # On ne supprime l'ancien fichier qu'une fois le nouveau validé.
     if cached is not None:
         cached.path.unlink(missing_ok=True)
 
-    return _build_uploaded_video(uploaded_file)
+    st.toast("Vidéo importée ✅")
+    return new_video
 
 
 def remove_video() -> None:
     cached: UploadedVideo | None = st.session_state.pop("uploaded_video", None)
     if cached is not None:
         cached.path.unlink(missing_ok=True)
+    st.session_state.replacing = False
     st.session_state.uploader_seed = st.session_state.get("uploader_seed", 0) + 1
+
+
+def start_replacing() -> None:
+    st.session_state.replacing = True
+
+
+def cancel_replacing() -> None:
+    st.session_state.replacing = False
 
 
 # ---------------------------------------------------------------------------
 # Header
 # ---------------------------------------------------------------------------
+
+afficher_statut_video()
+
 st.title("SimplCut", text_alignment="center")
 st.caption("Convertissez une vidéo .mov en GIF animé", text_alignment="center")
 st.divider()
@@ -85,24 +106,51 @@ st.divider()
 # ---------------------------------------------------------------------------
 # Upload section
 # ---------------------------------------------------------------------------
+# on récupère la video si elle est deja chargée, on stock cela dans une variable "current"
+current: UploadedVideo | None = st.session_state.get("uploaded_video")
+replacing: bool = st.session_state.get("replacing", False)
+
 with st.container(border=True):
     st.caption("IMPORT")
-    video = video_uploader()
 
-if video is not None:
-    first_upload = st.session_state.get("uploaded_video") is None
-    st.session_state.uploaded_video = video
-    if first_upload:
-        st.rerun()
+    if current is None or replacing:
+        # État « pas de vidéo » (ou remplacement en cours) : on montre l'uploader.
+        video = video_uploader()
+        if replacing:
+            st.button("Annuler", on_click=cancel_replacing)
+        if video is not None and video is not current:
+            # si une nouvelle video a été upload, on remplace l'ancienne
+            st.session_state.uploaded_video = video
+            st.session_state.replacing = False
+            # obligation de rerun ici car rechargement complet des éléments : sidebar etc...
+            st.rerun()
+
+    else:
+        # État « vidéo chargée » : carte de statut à la place de l'uploader.
+        st.success(f"✅ {current.name} chargée — {current.duration:.1f} s")
+
+        col_vignette, col_metriques = st.columns([1, 3], vertical_alignment="center")
+        with col_vignette:
+            st.image(current.thumbnail, width="stretch")
+        with col_metriques:
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Durée", f"{current.duration:.1f} s")
+            m2.metric("Dimensions", f"{current.width}×{current.height}")
+            m3.metric("FPS", f"{current.fps:.0f}")
+            m4.metric("Poids", f"{current.size_bytes / 1_000_000:.1f} Mo")
+
+        col_remplacer, col_supprimer = st.columns(2)
+        col_remplacer.button("Remplacer", on_click=start_replacing, width="stretch")
+        col_supprimer.button(
+            "Supprimer la vidéo", on_click=remove_video, width="stretch"
+        )
 
 # ---------------------------------------------------------------------------
 # Preview + remove
 # ---------------------------------------------------------------------------
-current: UploadedVideo | None = st.session_state.get("uploaded_video")
 if current is not None:
     with st.container(border=True):
         st.caption("APERÇU")
         st.video(str(current.path))
-        st.button("Supprimer la vidéo", on_click=remove_video)
 else:
     st.info("Importez une vidéo pour commencer.", icon="🎬")
