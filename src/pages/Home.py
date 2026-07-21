@@ -133,11 +133,9 @@ with st.container(border=True):
         with col_vignette:
             st.image(current.thumbnail, width="stretch")
         with col_metriques:
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Durée", f"{current.duration:.1f} s")
-            m2.metric("Dimensions", f"{current.width}×{current.height}")
-            m3.metric("FPS", f"{current.fps:.0f}")
-            m4.metric("Poids", f"{current.size_bytes / 1_000_000:.1f} Mo")
+            m1, m2 = st.columns(2)
+            m1.metric("Durée", f"{current.duration:.1f} s", width="stretch")
+            m2.metric("Poids", f"{current.size_bytes / 1_000_000:.1f} Mo")
 
         col_remplacer, col_supprimer = st.columns(2)
         col_remplacer.button("Remplacer", on_click=start_replacing, width="stretch")

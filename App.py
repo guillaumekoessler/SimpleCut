@@ -31,7 +31,7 @@ pages = [home]
 if st.session_state.get("uploaded_video") is not None:
     pages.append(video_to_gif)
 else:
-    st.sidebar.success("Test")
+    st.sidebar.text("Veuillez importer une vidéo")
 
 pg = st.navigation(pages)
 pg.run()
