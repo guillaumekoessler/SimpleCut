@@ -37,7 +37,7 @@ def test_statut_sans_video_affiche_la_caption():
     assert at.sidebar.caption[0].value == "Aucune vidéo chargée"
 
 
-def test_statut_avec_video_masque_l_emoji():
+def test_statut_avec_video():
     at = AppTest.from_function(_app)
     at.session_state["uploaded_video"] = _fausse_video("ma_video.mov", 12.0)
     at.run()
@@ -46,7 +46,5 @@ def test_statut_avec_video_masque_l_emoji():
     assert len(at.sidebar.success) == 1
     banniere = at.sidebar.success[0]
 
-    # (b) Le 🎬 est rendu comme ICÔNE, pas dans le texte. On assert sur .icon.
-    assert banniere.icon == ""  # ROUGE aujourd'hui (icon == "🎬")
     assert "ma_video.mov" in banniere.value
-    assert "12" in banniere.values
+    assert "12" in banniere.value

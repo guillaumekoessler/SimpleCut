@@ -27,6 +27,7 @@ htmlcov/
 .claude/
 CLAUDE.md
 CLAUDE.local.md
+prof/
 
 # OS
 .DS_Store
