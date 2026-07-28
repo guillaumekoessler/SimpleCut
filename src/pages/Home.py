@@ -8,8 +8,9 @@ from pathlib import Path
 import streamlit as st
 from moviepy import VideoFileClip
 
-from utils.VideoClasses import UploadedVideo
 from components.VideoStatus import afficher_statut_video
+from utils.Dimensions import LARGEUR_APERCU_VIDEO, LARGEUR_VIGNETTE_ACCUEIL
+from utils.VideoClasses import UploadedVideo
 
 
 def _build_uploaded_video(uploaded_file) -> UploadedVideo | None:
@@ -130,12 +131,13 @@ with st.container(border=True):
         st.success(f"✅ {current.name} chargée — {current.duration:.1f} s")
 
         col_vignette, col_metriques = st.columns([1, 3], vertical_alignment="center")
-        with col_vignette:
-            st.image(current.thumbnail, width="stretch")
+        # with col_vignette:
+        #     st.image(current.thumbnail, width=LARGEUR_VIGNETTE_ACCUEIL)
         with col_metriques:
-            m1, m2 = st.columns(2)
-            m1.metric("Durée", f"{current.duration:.1f} s", width="stretch")
-            m2.metric("Poids", f"{current.size_bytes / 1_000_000:.1f} Mo")
+            m1, m2, m3 = st.columns(3)
+            m1.image(current.thumbnail, width=LARGEUR_VIGNETTE_ACCUEIL)
+            m2.metric("Durée", f"{current.duration:.1f} s", width="stretch")
+            m3.metric("Poids", f"{current.size_bytes / 1_000_000:.1f} Mo")
 
         col_remplacer, col_supprimer = st.columns(2)
         col_remplacer.button("Remplacer", on_click=start_replacing, width="stretch")
@@ -149,6 +151,6 @@ with st.container(border=True):
 if current is not None:
     with st.container(border=True):
         st.caption("APERÇU")
-        st.video(str(current.path))
+        st.video(str(current.path), width=LARGEUR_APERCU_VIDEO)
 else:
     st.info("Importez une vidéo pour commencer.", icon="🎬")

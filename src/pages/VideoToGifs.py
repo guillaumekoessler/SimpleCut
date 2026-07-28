@@ -6,6 +6,7 @@ import streamlit as st
 from moviepy import VideoFileClip
 
 from components.VideoStatus import afficher_statut_video
+from utils.Dimensions import LARGEUR_APERCU_GIF, LARGEUR_APERCU_VIDEO
 from utils.GifClasses import ConversionParams
 from utils.VideoClasses import UploadedVideo
 
