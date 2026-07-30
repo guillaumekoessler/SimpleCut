@@ -73,7 +73,15 @@ def demander_generation(params: ConversionParams) -> None:
     st.session_state["gif_request"] = params
 
 
-st.video(str(current.path))
+_, milieu, _ = st.columns([1, 2, 1])
+with milieu:
+    st.video(
+        str(current.path),
+        width=LARGEUR_APERCU_VIDEO,
+        autoplay=True,
+        muted=True,
+        loop=True,
+    )
 
 # selection des paramètres de reformating de la video
 with st.container(border=True):

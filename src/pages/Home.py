@@ -9,7 +9,7 @@ import streamlit as st
 from moviepy import VideoFileClip
 
 from components.VideoStatus import afficher_statut_video
-from utils.Dimensions import LARGEUR_APERCU_VIDEO, LARGEUR_VIGNETTE_ACCUEIL
+from utils.Dimensions import LARGEUR_APERCU_VIDEO, LARGEUR_VIGNETTE_SIDEBAR
 from utils.VideoClasses import UploadedVideo
 
 
@@ -130,14 +130,19 @@ with st.container(border=True):
         # État « vidéo chargée » : carte de statut à la place de l'uploader.
         st.success(f"✅ {current.name} chargée — {current.duration:.1f} s")
 
-        col_vignette, col_metriques = st.columns([1, 3], vertical_alignment="center")
-        # with col_vignette:
-        #     st.image(current.thumbnail, width=LARGEUR_VIGNETTE_ACCUEIL)
-        with col_metriques:
-            m1, m2, m3 = st.columns(3)
-            m1.image(current.thumbnail, width=LARGEUR_VIGNETTE_ACCUEIL)
-            m2.metric("Durée", f"{current.duration:.1f} s", width="stretch")
-            m3.metric("Poids", f"{current.size_bytes / 1_000_000:.1f} Mo")
+        # Conteneur flex plutôt que des colonnes : chaque élément prend sa largeur
+        # naturelle et passe à la ligne quand la place manque, au lieu d'être
+        # compressé à une fraction fixe de la largeur.
+        with st.container(
+            horizontal=True, vertical_alignment="center", horizontal_alignment="center"
+        ):
+            st.image(current.thumbnail, width=LARGEUR_VIGNETTE_SIDEBAR)
+            st.metric("Durée", f"{current.duration:.1f} s", width="content")
+            st.metric(
+                "Poids",
+                f"{current.size_bytes / 1_000_000:.1f} Mo",
+                width="content",
+            )
 
         col_remplacer, col_supprimer = st.columns(2)
         col_remplacer.button("Remplacer", on_click=start_replacing, width="stretch")
@@ -151,6 +156,14 @@ with st.container(border=True):
 if current is not None:
     with st.container(border=True):
         st.caption("APERÇU")
-        st.video(str(current.path), width=LARGEUR_APERCU_VIDEO)
+        _, milieu, _ = st.columns([1, 2, 1])
+        with milieu:
+            st.video(
+                str(current.path),
+                width=LARGEUR_APERCU_VIDEO,
+                autoplay=True,
+                muted=True,
+                loop=True,
+            )
 else:
     st.info("Importez une vidéo pour commencer.", icon="🎬")
