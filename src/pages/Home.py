@@ -143,6 +143,9 @@ with st.container(border=True):
                 f"{current.size_bytes / 1_000_000:.1f} Mo",
                 width="content",
             )
+            st.metric(
+                "Taille", f"{current.width:.1f} x {current.height}", width="content"
+            )
 
         col_remplacer, col_supprimer = st.columns(2)
         col_remplacer.button("Remplacer", on_click=start_replacing, width="stretch")
@@ -156,11 +159,11 @@ with st.container(border=True):
 if current is not None:
     with st.container(border=True):
         st.caption("APERÇU")
-        _, milieu, _ = st.columns([1, 2, 1])
+        _, milieu, _ = st.columns([2, 3, 2])
         with milieu:
             st.video(
                 str(current.path),
-                width=LARGEUR_APERCU_VIDEO,
+                # width=LARGEUR_APERCU_VIDEO,
                 autoplay=True,
                 muted=True,
                 loop=True,

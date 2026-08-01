@@ -159,7 +159,9 @@ if segment_valide:
                 st.session_state.pop("gif_result", None)
             else:
                 octets = chemin.read_bytes()  # une seule lecture disque…
-                st.image(octets)  # …réutilisée pour l'aperçu…
+                _, milieu, _ = st.columns([1, 4, 1])
+                with milieu:
+                    st.image(octets)  # …réutilisée pour l'aperçu…
                 st.download_button(  # …et pour le téléchargement
                     "Télécharger le GIF",
                     data=octets,
