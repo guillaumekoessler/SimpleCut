@@ -58,3 +58,81 @@ def test_plafond(largeur, hauteur):
 def test_plancher(largeur, hauteur):
     """En deçà de RATIO_PLANCHER, plus rien ne rétrécit."""
     assert fraction_media(largeur, hauteur) == pytest.approx(FRACTION_MIN)
+
+
+def test_continuite_aux_jonctions():
+    """Pas de saut visuel quand un média change de régime.
+
+    Ce test ne vérifie pas une valeur mais un RACCORD : il interdit de régler
+    FRACTION_MIN / FRACTION_MAX sans réaliser qu'on créerait une discontinuité.
+    """
+    assert fraction_media(RATIO_PLANCHER, 1) == pytest.approx(FRACTION_MIN)
+    assert fraction_media(RATIO_PLAFOND, 1) == pytest.approx(FRACTION_MAX)
+
+    epsilon = 1e-6
+    assert fraction_media(RATIO_PLANCHER - epsilon, 1) == pytest.approx(
+        fraction_media(RATIO_PLANCHER + epsilon, 1), abs=1e-5
+    )
+    assert fraction_media(RATIO_PLAFOND - epsilon, 1) == pytest.approx(
+        fraction_media(RATIO_PLAFOND + epsilon, 1), abs=1e-5
+    )
+
+
+def test_monotonie():
+    """Plus large ⇒ jamais plus petit."""
+    ratios = [0.1, 0.5, 0.5625, RATIO_PLANCHER, 1.0, 4 / 3, 1.5, RATIO_PLAFOND, 2.4, 10]
+    fractions = [fraction_media(r, 1) for r in ratios]
+    assert fractions == sorted(fractions)
+
+
+def test_contrat_streamlit(largeur, hauteur):
+    """Le contrat de st.columns : poids de somme 1, tous strictement positifs.
+
+    Streamlit lève StreamlitInvalidColumnSpecError si un poids est <= 0.
+    """
+    poids = poids_colonnes_media(largeur, hauteur)
+    assert len(poids) == 3
+    assert sum(poids) == pytest.approx(1)
+    assert all(p > 0 for p in poids)
+
+
+def test_contrat_des_constantes():
+    """Un futur réglage du calage ne peut pas casser la mise en page."""
+    # < 1 strict : garantit un poids latéral (1 - f) / 2 > 0.
+    assert 0 < FRACTION_MIN <= FRACTION_MAX < 1
+    # À f = 1/3 les trois colonnes sont égales : le média n'est plus « au centre ».
+    assert FRACTION_MIN > 1 / 3
+    # Sinon le régime médian est vide ou inversé.
+    assert RATIO_PLANCHER < RATIO_PLAFOND
+
+
+@pytest.mark.parametrize(
+    "largeur, hauteur",
+    [
+        (0, 100),
+        (100, 0),
+        (0, 0),
+        (-1, 10),
+        (10, -1),
+        (-1, -1),
+        (float("nan"), 10),
+        (10, float("nan")),
+        (float("inf"), 10),
+        (10, float("inf")),
+    ],
+)
+def test_dimensions_invalides(largeur, hauteur):
+    """Chaque argument est validé séparément, avant toute division."""
+    with pytest.raises(ValueError):
+        fraction_media(largeur, hauteur)
+
+    with pytest.raises(ValueError):
+        poids_colonnes_media(largeur, hauteur)
+
+
+def test_message_erreur_nomme_la_dimension_fautive():
+    """Le message doit désigner l'argument en cause, pas juste « invalide »."""
+    with pytest.raises(ValueError, match="hauteur"):
+        fraction_media(100, 0)
+    with pytest.raises(ValueError, match="largeur"):
+        fraction_media(-5, 100)
