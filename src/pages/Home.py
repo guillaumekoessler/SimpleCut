@@ -8,8 +8,9 @@ from pathlib import Path
 import streamlit as st
 from moviepy import VideoFileClip
 
+from components.MediaLayout import colonne_media
 from components.VideoStatus import afficher_statut_video
-from utils.Dimensions import LARGEUR_APERCU_VIDEO, LARGEUR_VIGNETTE_SIDEBAR
+from utils.Dimensions import LARGEUR_VIGNETTE_SIDEBAR
 from utils.VideoClasses import UploadedVideo
 
 
@@ -159,11 +160,9 @@ with st.container(border=True):
 if current is not None:
     with st.container(border=True):
         st.caption("APERÇU")
-        _, milieu, _ = st.columns([2, 3, 2])
-        with milieu:
+        with colonne_media(largeur=current.width, hauteur=current.height):
             st.video(
                 str(current.path),
-                # width=LARGEUR_APERCU_VIDEO,
                 autoplay=True,
                 muted=True,
                 loop=True,

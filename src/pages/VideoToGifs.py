@@ -5,8 +5,8 @@ from pathlib import Path
 import streamlit as st
 from moviepy import VideoFileClip
 
+from components.MediaLayout import colonne_media
 from components.VideoStatus import afficher_statut_video
-from utils.Dimensions import LARGEUR_APERCU_GIF, LARGEUR_APERCU_VIDEO
 from utils.GifClasses import ConversionParams
 from utils.VideoClasses import UploadedVideo
 
@@ -73,11 +73,10 @@ def demander_generation(params: ConversionParams) -> None:
     st.session_state["gif_request"] = params
 
 
-_, milieu, _ = st.columns([1, 2, 1])
-with milieu:
+# Apercu video
+with colonne_media(largeur=current.width, hauteur=current.height):
     st.video(
         str(current.path),
-        width=LARGEUR_APERCU_VIDEO,
         autoplay=True,
         muted=True,
         loop=True,
@@ -159,8 +158,11 @@ if segment_valide:
                 st.session_state.pop("gif_result", None)
             else:
                 octets = chemin.read_bytes()  # une seule lecture disque…
-                _, milieu, _ = st.columns([1, 4, 1])
-                with milieu:
+                # Ratio du GIF = ratio source (resized() est uniforme, à la
+                # troncature près : écart mesuré < 0,5 %). Dès qu'un crop / une
+                # rotation / un letterbox arrivera, passer ici les dimensions
+                # RÉELLES du GIF.
+                with colonne_media(largeur=current.width, hauteur=current.height):
                     st.image(octets)  # …réutilisée pour l'aperçu…
                 st.download_button(  # …et pour le téléchargement
                     "Télécharger le GIF",

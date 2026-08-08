@@ -2,15 +2,14 @@ import math
 
 import pytest
 
-from utils.Layout import (
+from utils.Dimensions import (
     FRACTION_MAX,
     FRACTION_MIN,
     HAUTEUR_CIBLE,
     RATIO_PLAFOND,
     RATIO_PLANCHER,
-    fraction_media,
-    poids_colonnes_media,
 )
+from utils.Layout import fraction_media, poids_colonnes_media
 
 
 def test_calage_paysage_reproduit_1_8_1():
@@ -85,6 +84,23 @@ def test_monotonie():
     assert fractions == sorted(fractions)
 
 
+@pytest.mark.parametrize(
+    "largeur, hauteur",
+    [
+        (640, 360),
+        (720, 1280),
+        (1080, 1920),
+        (1920, 1080),
+        (4, 3),
+        (3, 4),
+        (1, 1),
+        (21, 9),
+        (1, 3),
+        (1, 10000),
+        (10000, 1),
+        (0.5, 0.5),
+    ],
+)
 def test_contrat_streamlit(largeur, hauteur):
     """Le contrat de st.columns : poids de somme 1, tous strictement positifs.
 
