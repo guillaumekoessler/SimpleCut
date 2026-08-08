@@ -157,17 +157,19 @@ if segment_valide:
                 chemin.unlink(missing_ok=True)
                 st.session_state.pop("gif_result", None)
             else:
-                octets = chemin.read_bytes()  # une seule lecture disque…
+                octets = (
+                    chemin.read_bytes()
+                )  # une seule lecture disque utilisée pour l'apercu et le téléchargement
                 # Ratio du GIF = ratio source (resized() est uniforme, à la
                 # troncature près : écart mesuré < 0,5 %). Dès qu'un crop / une
                 # rotation / un letterbox arrivera, passer ici les dimensions
                 # RÉELLES du GIF.
                 with colonne_media(largeur=current.width, hauteur=current.height):
-                    st.image(octets)  # …réutilisée pour l'aperçu…
-                st.download_button(  # …et pour le téléchargement
+                    st.image(octets)
+                st.download_button(
                     "Télécharger le GIF",
                     data=octets,
-                    file_name=f"{Path(current.name).stem}.gif",  # (#6) pas .mov !
+                    file_name=f"{Path(current.name).stem}.gif",
                     mime="image/gif",
                 )
 
