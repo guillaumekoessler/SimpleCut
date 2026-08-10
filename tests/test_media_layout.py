@@ -1,5 +1,4 @@
 import pytest
-from streamlit.testing.v1 import AppTest
 
 
 def _app():
@@ -24,11 +23,9 @@ def _app():
         (10000, 1),  # extrême paysage, ramené sur le plafond
     ],
 )
-def test_aucune_erreur_poids(largeur, hauteur):
+def test_aucune_erreur_poids(largeur, hauteur, rendre_app):
     """C'est Streamlit lui-même qui valide son contrat — on ne le réimplémente pas."""
-    at = AppTest.from_function(_app)
-    at.session_state["dimensions"] = (largeur, hauteur)
-    at.run()
+    at = rendre_app(_app, dimensions=(largeur, hauteur))
     assert not at.exception
 
 
@@ -39,21 +36,19 @@ def test_aucune_erreur_poids(largeur, hauteur):
         (720, 1280, [2 / 7, 3 / 7, 2 / 7]),
     ],
 )
-def test_les_poids_rendus_reproduisent_le_calage(largeur, hauteur, attendu):
+def test_les_poids_rendus_reproduisent_le_calage(
+    largeur, hauteur, attendu, rendre_app, poids_apercu
+):
     """Preuve que les floats reproduisent [1,8,1] / [2,3,2] : Streamlit normalise
     Les poids sont définits à dire d'experts"""
-    at = AppTest.from_function(_app)
-    at.session_state["dimensions"] = (largeur, hauteur)
-    at.run()
+    at = rendre_app(_app, dimensions=(largeur, hauteur))
 
-    poids = [c.proto.weight for c in at.get("column")]
-    assert poids == pytest.approx(attendu)
+    assert not at.exception
+    assert poids_apercu(at) == pytest.approx(attendu)
 
 
-def test_le_contenu_est_dans_la_colonne_centrale():
-    at = AppTest.from_function(_app)
-    at.session_state["dimensions"] = (640, 360)
-    at.run()
+def test_le_contenu_est_dans_la_colonne_centrale(rendre_app):
+    at = rendre_app(_app, dimensions=(640, 360))
 
     gauche, milieu, droite = at.get("column")
     assert len(gauche.children) == 0
@@ -69,16 +64,14 @@ def test_le_contenu_est_dans_la_colonne_centrale():
     ],
 )
 def test_dimensions_invalides_font_remonter_la_valueerror(
-    dimensions, dimension_fautive
+    dimensions, dimension_fautive, rendre_app
 ):
     """Politique assumée : pas de repli silencieux, l'erreur remonte.
 
     Le message doit désigner l'argument fautif (largeur ou hauteur), pas juste
     « invalide » — même contrat que test_layout.py.
     """
-    at = AppTest.from_function(_app)
-    at.session_state["dimensions"] = dimensions
-    at.run()
+    at = rendre_app(_app, dimensions=dimensions)
 
     assert at.exception
     # .proto.type porte la classe de l'exception ; .type vaudrait "exception"
