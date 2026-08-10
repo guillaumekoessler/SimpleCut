@@ -18,10 +18,6 @@ sys.path.insert(0, str(RACINE / "src"))
 # Importé APRÈS l'insertion du path, comme dans App.py.
 from utils.VideoClasses import UploadedVideo  # noqa: E402
 
-# st.video ne décode rien : il lit les octets du fichier et les transmet au
-# navigateur. Un fichier bidon suffit donc à rendre un aperçu.
-OCTETS_BIDON = b"\x00" * 16
-
 
 # ---------------------------------------------------------------------------
 # Fausses données
@@ -44,7 +40,7 @@ def fabrique_video(tmp_path):
         duree: float = 10.0,
     ) -> UploadedVideo:
         chemin = tmp_path / nom
-        chemin.write_bytes(OCTETS_BIDON)
+        chemin.write_bytes(b"\x00" * 16)
         return UploadedVideo(
             path=chemin,
             name=nom,
@@ -52,7 +48,7 @@ def fabrique_video(tmp_path):
             width=largeur,
             height=hauteur,
             fps=30.0,
-            size_bytes=len(OCTETS_BIDON),
+            size_bytes=16,
             file_id="test-file-id",
             # Frame RGB minimale : de quoi rendre st.image sans décoder de vidéo.
             thumbnail=np.zeros((10, 10, 3), dtype=np.uint8),
@@ -92,7 +88,7 @@ def rendre_app():
 def rendre_page():
     """Rend une vraie page de src/pages/ avec un état initial.
 
-        at = rendre_page("src/pages/Home.py", uploaded_video=video)
+    at = rendre_page("src/pages/Home.py", uploaded_video=video)
     """
 
     def _rendre(page: str, **etat) -> AppTest:
@@ -124,3 +120,36 @@ def poids_apercu():
         return [cols[j].proto.weight for j in (i - 1, i, i + 1)]
 
     return _poids
+
+
+@pytest.fixture(scope="session")
+def clip_reel(tmp_path_factory):
+    """Petit clip mp4 RÉEL (64x48, 10 fps, 1 s), généré une fois par session.
+
+    Nécessaire dès qu'un test décode vraiment des frames (extraction de
+    vignettes) : le fichier bidon de fausse_video ne suffit plus.
+    Généré plutôt que commité : pas de binaire dans le dépôt.
+    """
+    # Import local : ne pas payer l'import MoviePy à chaque collecte pytest.
+    from moviepy import ColorClip
+
+    chemin = tmp_path_factory.mktemp("clips") / "mini.mp4"
+    clip = ColorClip(size=(64, 48), color=(200, 30, 30), duration=1.0).with_fps(10)
+    clip.write_videofile(str(chemin), logger=None)
+    return chemin
+
+
+@pytest.fixture
+def video_reelle(clip_reel):
+    """UploadedVideo adossé au clip réel — pour les tests qui décodent."""
+    return UploadedVideo(
+        path=clip_reel,
+        name="mini.mp4",
+        duration=1.0,
+        width=64,
+        height=48,
+        fps=10.0,
+        size_bytes=clip_reel.stat().st_size,
+        file_id="clip-reel",
+        thumbnail=np.zeros((10, 10, 3), dtype=np.uint8),
+    )
