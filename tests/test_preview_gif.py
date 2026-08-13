@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from utils.Preview import PAS_INTERVALLE, bornes_boucle_video, temps_vignette
+from utils.PreviewGif import PAS_INTERVALLE, bornes_boucle_video, temps_vignette
 
 
 # ---------------------------------------------------------------------------
@@ -29,7 +29,8 @@ class TestTempsVignette:
         )
 
     def test_borne_le_negatif_a_zero(self):
-        assert temps_vignette(-2.0, duree=10.0, fps=30.0) == 0.0
+        with pytest.raises(ValueError):
+            temps_vignette(-2.0, duree=10.0, fps=30.0) == 0.0
 
     def test_video_plus_courte_qu_une_frame(self):
         # duree - 1/fps < 0 : le plancher 0 doit gagner, pas un temps négatif.

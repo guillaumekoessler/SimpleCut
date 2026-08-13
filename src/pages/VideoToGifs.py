@@ -5,9 +5,11 @@ from pathlib import Path
 import streamlit as st
 from moviepy import VideoFileClip
 
+from components.FramePreview import afficher_vignettes_bornes
 from components.MediaLayout import colonne_media
 from components.VideoStatus import afficher_statut_video
 from utils.GifClasses import ConversionParams
+from utils.PreviewGif import PAS_INTERVALLE, bornes_boucle_video
 from utils.VideoClasses import UploadedVideo
 
 afficher_statut_video()
@@ -73,27 +75,29 @@ def demander_generation(params: ConversionParams) -> None:
     st.session_state["gif_request"] = params
 
 
-# Apercu video
-with colonne_media(largeur=current.width, hauteur=current.height):
-    st.video(
-        str(current.path),
-        autoplay=True,
-        muted=True,
-        loop=True,
-    )
+# Apercu video : conteneur déclaré ici (haut de page) mais rempli plus bas,
+# une fois les bornes du slider connues — st.container permet ce différé.
+apercu = st.container()
 
 # selection des paramètres de reformating de la video
 with st.container(border=True):
     st.caption("PARAMÈTRES")
+
+    # Même différé que l'aperçu : les vignettes s'affichent AU-DESSUS du
+    # slider mais dépendent de sa valeur.
+    zone_vignettes = st.container()
 
     start_time, end_time = st.slider(
         "Intervalle",
         min_value=0.0,
         max_value=float(current.duration),
         value=(0.0, min(5.0, float(current.duration))),
-        step=0.1,
+        step=PAS_INTERVALLE,
         format="%.1fs",
     )
+
+    with zone_vignettes:
+        afficher_vignettes_bornes(current, start_time, end_time)
 
     col1, col2 = st.columns(2)
     with col1:
@@ -104,6 +108,22 @@ with st.container(border=True):
     st.divider()
     st.caption(
         f"Segment : {end_time - start_time:.1f}s · FPS : {fps} · Échelle : {resize_factor}"
+    )
+
+# Remplissage différé de l'aperçu : la vidéo boucle sur la sélection.
+# floor/ceil car st.video tronque les bornes à la seconde entière — la boucle
+# englobe la sélection ; les vignettes ci-dessus portent la précision au 1/10e.
+debut_boucle, fin_boucle = bornes_boucle_video(
+    start_time, end_time, float(current.duration)
+)
+with apercu, colonne_media(largeur=current.width, hauteur=current.height):
+    st.video(
+        str(current.path),
+        autoplay=True,
+        muted=True,
+        loop=True,
+        start_time=debut_boucle,
+        end_time=fin_boucle,
     )
 
 # création du gif en fonction des paramètres séléctionnés
