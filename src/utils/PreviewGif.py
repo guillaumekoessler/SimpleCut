@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import math
 
-from utils.MathsVerif import _valider_positive_finite
+from utils.MathsVerif import _valider_fini, _valider_positive_finite
 
 # Pas du slider « Intervalle » en secondes. Source unique de vérité : la page
 # (step du slider) et l'arrondi des temps de vignette s'alignent dessus.
@@ -29,7 +29,8 @@ def temps_vignette(
     produisent la MÊME clé de cache — puis le borne dans [0, duree - 1/fps].
 
     Args:
-        t: Instant demandé en secondes (valeur brute du slider).
+        t: Instant demandé en secondes (valeur brute du slider). Seule la
+            finitude est exigée : le signe est rattrapé par le bornage.
         duree: Durée de la vidéo en secondes (> 0, finie).
         fps: Cadence de la vidéo en images/s (> 0, finie).
         pas: Pas d'arrondi en secondes (> 0, fini).
@@ -44,7 +45,11 @@ def temps_vignette(
     _valider_positive_finite("duree", duree)
     _valider_positive_finite("fps", fps)
     _valider_positive_finite("pas", pas)
-    _valider_positive_finite("t", t, test_positive=False)
+    # t n'est PAS contraint en signe : c'est une position de slider, que le
+    # bornage ci-dessous ramène dans [0, plafond]. t == 0 est la position par
+    # défaut (première frame) — la refuser vidait les deux vignettes au
+    # chargement de la page, FramePreview attrapant le ValueError.
+    _valider_fini("t", t)
 
     # round(t/pas)*pas réintroduit du bruit binaire (31 * 0.1 == 3.1000…05) :
     # le second round à 6 décimales normalise la clé de cache.
@@ -77,7 +82,8 @@ def bornes_boucle_video(debut: float, fin: float, duree: float) -> tuple[int, in
                     négative, ou si l'ordre debut <= fin <= duree est violé.
     """
     _valider_positive_finite("duree", duree)
-    _valider_positive_finite("debut", debut, test_positive=False)
+    # debut == 0.0 est la valeur par défaut du slider : le zéro doit passer.
+    _valider_positive_finite("debut", debut, zero_autorise=True)
     _valider_positive_finite("fin", fin)
 
     if fin < debut:

@@ -29,8 +29,20 @@ class TestTempsVignette:
         )
 
     def test_borne_le_negatif_a_zero(self):
+        # t est une position de slider : on la ramène dans le domaine, on ne
+        # la refuse pas. Seul le non-fini est irrécupérable (cf. plus bas).
+        assert temps_vignette(-2.0, duree=10.0, fps=30.0) == 0.0
+
+    def test_t_zero_est_valide(self):
+        # Position par défaut du slider : la première frame doit être servie,
+        # sinon FramePreview attrape le ValueError et vide les vignettes.
+        assert temps_vignette(0.0, duree=10.0, fps=30.0) == 0.0
+
+    @pytest.mark.parametrize("t", [math.nan, math.inf, -math.inf])
+    def test_t_non_fini(self, t):
+        # Un nan traverserait min/max sans être clampé : clé de cache pourrie.
         with pytest.raises(ValueError):
-            temps_vignette(-2.0, duree=10.0, fps=30.0) == 0.0
+            temps_vignette(t, duree=10.0, fps=30.0)
 
     def test_video_plus_courte_qu_une_frame(self):
         # duree - 1/fps < 0 : le plancher 0 doit gagner, pas un temps négatif.
@@ -74,7 +86,8 @@ class TestBornesBoucleVideo:
         assert bornes_boucle_video(8.2, 9.5, duree=9.7) == (8, 10)
 
     def test_debut_negatif(self):
-        assert bornes_boucle_video(-0.1, 4.0, duree=10.0) == (0, 4)
+        with pytest.raises(ValueError):
+            bornes_boucle_video(-0.1, 4.0, duree=10.0)
 
     def test_fin_avant_debut(self):
         with pytest.raises(ValueError):
