@@ -40,8 +40,13 @@ def afficher_vignettes_bornes(video: UploadedVideo, debut: float, fin: float) ->
         st.caption("Vignettes indisponibles pour cette vidéo.")
         return
 
+    # Conteneur VERTICAL intermédiaire : st.columns n'expose que
+    # vertical_alignment. En vertical, horizontal_alignment pilote l'axe
+    # transversal du flex — image et légende restent empilées, mais centrées.
+    # Nécessaire car st.image en width="content" garde sa largeur naturelle
+    # (<= LARGEUR_MAX_EXTRACTION) et se calerait à gauche d'une demi-colonne.
     colonne_debut, colonne_fin = st.columns(2)
-    with colonne_debut:
+    with colonne_debut.container(horizontal_alignment="center"):
         st.image(vignette_debut, caption=f"Début · {debut:.1f} s")
-    with colonne_fin:
+    with colonne_fin.container(horizontal_alignment="center"):
         st.image(vignette_fin, caption=f"Fin · {fin:.1f} s")
