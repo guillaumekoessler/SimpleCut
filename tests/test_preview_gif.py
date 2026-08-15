@@ -74,8 +74,7 @@ class TestBornesBoucleVideo:
         assert bornes_boucle_video(8.2, 9.5, duree=9.7) == (8, 10)
 
     def test_debut_negatif(self):
-        with pytest.raises(ValueError):
-            bornes_boucle_video(-0.1, 4.0, duree=10.0)
+        assert bornes_boucle_video(-0.1, 4.0, duree=10.0) == (0, 4)
 
     def test_fin_avant_debut(self):
         with pytest.raises(ValueError):

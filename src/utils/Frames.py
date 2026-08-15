@@ -11,9 +11,9 @@ from PIL import Image
 # demi-colonne : net sur écran Retina, sans stocker des frames 1080p dans le
 # cache). Ce n'est PAS une largeur d'affichage — le calage visuel reste
 # l'affaire exclusive de utils.Layout.
-LARGEUR_MAX_EXTRACTION = 480
+LARGEUR_MAX_EXTRACTION = 240
 
-# Plafond mémoire du cache : 64 × (480×270×3 octets ≈ 0,4 Mo) ≈ 25 Mo.
+# Plafond mémoire du cache : 64
 _MAX_VIGNETTES_EN_CACHE = 64
 
 
