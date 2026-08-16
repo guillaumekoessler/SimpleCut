@@ -23,3 +23,41 @@ def test_le_contenu_est_bien_decode(clip_reel):
 
     assert vignette[..., 0].mean() > 150  # canal R
     assert vignette[..., 1].mean() < 80  # canal G
+
+
+def test_fichier_illisible_leve_oserror(tmp_path):
+    """On verifie qu'un fichier comrompu ne soit pas lu"""
+    faux = tmp_path / "faux.mov"
+    faux.write_bytes(b"\x00" * 16)
+
+    with pytest.raises(OSError):
+        extraire_vignette(str(faux), "id-faux", 0.0)
+
+
+def test_largeur_max_invalide(clip_reel):
+    """on test que largeur max soit positive"""
+    with pytest.raises(ValueError):
+        extraire_vignette(str(clip_reel), "id-test", 0.5, largeur_max=0)
+
+
+def test_file_id_fait_partie_de_la_cle_de_cache(clip_reel, tmp_path):
+    """Un chemin de tempfile peut être recyclé par l'OS : file_id désambiguïse.
+
+    Scénario complet : même chemin, contenu remplacé (rouge → vert).
+    Avec le MÊME file_id le cache ressert l'ancienne frame (rouge) ;
+    avec un NOUVEAU file_id la vidéo est re-décodée (vert).
+    """
+    from moviepy import ColorClip
+
+    chemin = tmp_path / "recycle.mp4"
+    shutil.copy(clip_reel, chemin)
+    frame_rouge = extraire_vignette(str(chemin), "upload-1", 0.5)
+
+    clip_vert = ColorClip(size=(64, 48), color=(30, 200, 30), duration=1.0).with_fps(10)
+    clip_vert.write_videofile(str(chemin), logger=None)
+
+    meme_id = extraire_vignette(str(chemin), "upload-1", 0.5)
+    autre_id = extraire_vignette(str(chemin), "upload-2", 0.5)
+
+    assert np.array_equal(meme_id, frame_rouge)  # cache : l'ancienne frame
+    assert autre_id[..., 1].mean() > 150  # re-décodée : le vert domine

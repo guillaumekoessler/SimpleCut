@@ -23,28 +23,25 @@ from utils.VideoClasses import UploadedVideo  # noqa: E402
 # Fausses données
 # ---------------------------------------------------------------------------
 @pytest.fixture
-def fabrique_video(tmp_path):
-    """Fabrique un UploadedVideo adossé à un fichier bidon sur disque.
+def fausse_video(tmp_path):
+    """Fabrique un UploadedVideo pointant sur un fichier bidon de 16 octets.
+
+    st.video ne décode rien : il lit les octets et les transmet au navigateur.
+    Aucune vraie vidéo n'est nécessaire pour rendre l'aperçu.
 
     UploadedVideo est frozen/slots : ses 9 champs sont tous requis. On les
-    remplit ici une fois pour toutes ; chaque test ne surcharge que ce qu'il
-    éprouve vraiment — le ratio pour le calage de l'aperçu, le nom et la durée
-    pour la bannière de statut.
+    remplit ici une fois pour toutes ; seul le ratio — ce que le calage de
+    l'aperçu éprouve vraiment — est paramétrable. Dès qu'un test décode
+    réellement des frames, prendre video_reelle.
     """
+    chemin = tmp_path / "fausse.mov"
+    chemin.write_bytes(b"\x00" * 16)
 
-    def _fabriquer(
-        largeur: int = 640,
-        hauteur: int = 360,
-        *,
-        nom: str = "fausse.mov",
-        duree: float = 10.0,
-    ) -> UploadedVideo:
-        chemin = tmp_path / nom
-        chemin.write_bytes(b"\x00" * 16)
+    def _fabriquer(largeur: int, hauteur: int) -> UploadedVideo:
         return UploadedVideo(
             path=chemin,
-            name=nom,
-            duration=duree,
+            name="fausse.mov",
+            duration=10.0,
             width=largeur,
             height=hauteur,
             fps=30.0,
