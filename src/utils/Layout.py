@@ -7,15 +7,7 @@ Seul le RATIO du média compte, jamais sa taille absolue.
 
 from __future__ import annotations
 
-import math
-
-from utils.Dimensions import (
-    FRACTION_MAX,
-    FRACTION_MIN,
-    HAUTEUR_CIBLE,
-    RATIO_PLAFOND,
-    RATIO_PLANCHER,
-)
+from utils.Dimensions import FRACTION_MAX, FRACTION_MIN, HAUTEUR_CIBLE
 from utils.MathsVerif import _valider_positive_finite
 
 

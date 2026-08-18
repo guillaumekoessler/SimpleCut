@@ -1,7 +1,4 @@
-from dataclasses import dataclass, field
-from pathlib import Path
-
-import numpy as np
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)

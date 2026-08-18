@@ -13,6 +13,3 @@ RATIO_PLAFOND = 16 / 9  # ratio auquel FRACTION_MAX a été calé
 HAUTEUR_CIBLE = FRACTION_MAX / RATIO_PLAFOND
 # En deçà de ce ratio, le plancher de largeur prend le relais.
 RATIO_PLANCHER = FRACTION_MIN / HAUTEUR_CIBLE
-
-
-PAS_INTERVALLE = 0.1

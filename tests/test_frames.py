@@ -5,6 +5,7 @@ import shutil
 import numpy as np
 import pytest
 
+from tests.donnees import VERT
 from utils.Frames import extraire_vignette
 
 
@@ -40,21 +41,18 @@ def test_largeur_max_invalide(clip_reel):
         extraire_vignette(str(clip_reel), "id-test", 0.5, largeur_max=0)
 
 
-def test_file_id_fait_partie_de_la_cle_de_cache(clip_reel, tmp_path):
+def test_file_id_fait_partie_de_la_cle_de_cache(clip_reel, tmp_path, fabrique_clip):
     """Un chemin de tempfile peut être recyclé par l'OS : file_id désambiguïse.
 
     Scénario complet : même chemin, contenu remplacé (rouge → vert).
     Avec le MÊME file_id le cache ressert l'ancienne frame (rouge) ;
     avec un NOUVEAU file_id la vidéo est re-décodée (vert).
     """
-    from moviepy import ColorClip
-
     chemin = tmp_path / "recycle.mp4"
     shutil.copy(clip_reel, chemin)
     frame_rouge = extraire_vignette(str(chemin), "upload-1", 0.5)
 
-    clip_vert = ColorClip(size=(64, 48), color=(30, 200, 30), duration=1.0).with_fps(10)
-    clip_vert.write_videofile(str(chemin), logger=None)
+    fabrique_clip(chemin, VERT)  # même chemin, autre contenu
 
     meme_id = extraire_vignette(str(chemin), "upload-1", 0.5)
     autre_id = extraire_vignette(str(chemin), "upload-2", 0.5)

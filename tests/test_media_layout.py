@@ -1,5 +1,7 @@
 import pytest
 
+from tests.donnees import CALAGES_REFERENCE, DIMENSIONS_INVALIDES
+
 
 def _app():
     # Import DANS le corps : obligatoire pour AppTest.from_function.
@@ -24,27 +26,22 @@ def _app():
     ],
 )
 def test_aucune_erreur_poids(largeur, hauteur, rendre_app):
-    """C'est Streamlit lui-même qui valide son contrat — on ne le réimplémente pas."""
-    at = rendre_app(_app, dimensions=(largeur, hauteur))
-    assert not at.exception
+    """C'est Streamlit lui-même qui valide son contrat — on ne le réimplémente pas.
+
+    L'absence d'exception est affirmée par rendre_app : rendre EST le test.
+    """
+    rendre_app(_app, dimensions=(largeur, hauteur))
 
 
-@pytest.mark.parametrize(
-    "largeur, hauteur, attendu",
-    [
-        (640, 360, [0.1, 0.8, 0.1]),
-        (720, 1280, [2 / 7, 3 / 7, 2 / 7]),
-    ],
-)
+@pytest.mark.parametrize("largeur, hauteur, poids", CALAGES_REFERENCE)
 def test_les_poids_rendus_reproduisent_le_calage(
-    largeur, hauteur, attendu, rendre_app, poids_apercu
+    largeur, hauteur, poids, rendre_app, poids_apercu
 ):
     """Preuve que les floats reproduisent [1,8,1] / [2,3,2] : Streamlit normalise
     Les poids sont définits à dire d'experts"""
     at = rendre_app(_app, dimensions=(largeur, hauteur))
 
-    assert not at.exception
-    assert poids_apercu(at) == pytest.approx(attendu)
+    assert poids_apercu(at) == pytest.approx(poids)
 
 
 def test_le_contenu_est_dans_la_colonne_centrale(rendre_app):
@@ -56,25 +53,19 @@ def test_le_contenu_est_dans_la_colonne_centrale(rendre_app):
     assert len(droite.children) == 0
 
 
-@pytest.mark.parametrize(
-    "dimensions, dimension_fautive",
-    [
-        ((0, 100), "largeur"),
-        ((100, 0), "hauteur"),
-    ],
-)
+@pytest.mark.parametrize("largeur, hauteur, fautive", DIMENSIONS_INVALIDES)
 def test_dimensions_invalides_font_remonter_la_valueerror(
-    dimensions, dimension_fautive, rendre_app
+    largeur, hauteur, fautive, rendre_app
 ):
     """Politique assumée : pas de repli silencieux, l'erreur remonte.
 
     Le message doit désigner l'argument fautif (largeur ou hauteur), pas juste
     « invalide » — même contrat que test_layout.py.
     """
-    at = rendre_app(_app, dimensions=dimensions)
+    at = rendre_app(_app, dimensions=(largeur, hauteur), sans_erreur=False)
 
     assert at.exception
     # .proto.type porte la classe de l'exception ; .type vaudrait "exception"
     # (le type d'ÉLÉMENT Streamlit), ce qui ne prouverait rien.
     assert at.exception[0].proto.type == "ValueError"
-    assert dimension_fautive in at.exception[0].value
+    assert fautive in at.exception[0].value

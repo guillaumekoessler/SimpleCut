@@ -1,7 +1,6 @@
-import math
-
 import pytest
 
+from tests.donnees import CALAGES_REFERENCE, DIMENSIONS_INVALIDES
 from utils.Dimensions import (
     FRACTION_MAX,
     FRACTION_MIN,
@@ -12,16 +11,12 @@ from utils.Dimensions import (
 from utils.Layout import fraction_media, poids_colonnes_media
 
 
-def test_calage_paysage_reproduit_1_8_1():
-    """Calage utilisateur : 640x360 doit redonner exactement [1, 8, 1]"""
-    assert fraction_media(640, 360) == pytest.approx(0.8)
-    assert poids_colonnes_media(640, 360) == pytest.approx((0.1, 0.8, 0.1))
-
-
-def test_calage_portrait_reproduit_2_3_2():
-    """Calage utilisateur : 720x1280 doit redonner exactement [2, 3, 2]"""
-    assert fraction_media(720, 1280) == pytest.approx(3 / 7)
-    assert poids_colonnes_media(720, 1280) == pytest.approx((2 / 7, 3 / 7, 2 / 7))
+@pytest.mark.parametrize("largeur, hauteur, poids", CALAGES_REFERENCE)
+def test_calages_de_reference(largeur, hauteur, poids):
+    """Calages utilisateur : 640x360 redonne [1, 8, 1] et 720x1280 [2, 3, 2]."""
+    assert poids_colonnes_media(largeur, hauteur) == pytest.approx(poids)
+    # La fraction média EST le poids central : les deux fonctions s'accordent.
+    assert fraction_media(largeur, hauteur) == pytest.approx(poids[1])
 
 
 def test_invariance_echelle():
@@ -122,33 +117,15 @@ def test_contrat_des_constantes():
     assert RATIO_PLANCHER < RATIO_PLAFOND
 
 
-@pytest.mark.parametrize(
-    "largeur, hauteur",
-    [
-        (0, 100),
-        (100, 0),
-        (0, 0),
-        (-1, 10),
-        (10, -1),
-        (-1, -1),
-        (float("nan"), 10),
-        (10, float("nan")),
-        (float("inf"), 10),
-        (10, float("inf")),
-    ],
-)
-def test_dimensions_invalides(largeur, hauteur):
-    """Chaque argument est validé séparément, avant toute division."""
-    with pytest.raises(ValueError):
+@pytest.mark.parametrize("largeur, hauteur, fautive", DIMENSIONS_INVALIDES)
+def test_dimensions_invalides(largeur, hauteur, fautive):
+    """Chaque argument est validé séparément, avant toute division.
+
+    Et le message doit DÉSIGNER l'argument en cause, pas juste dire
+    « invalide » — d'où le `match`.
+    """
+    with pytest.raises(ValueError, match=fautive):
         fraction_media(largeur, hauteur)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=fautive):
         poids_colonnes_media(largeur, hauteur)
-
-
-def test_message_erreur_nomme_la_dimension_fautive():
-    """Le message doit désigner l'argument en cause, pas juste « invalide »."""
-    with pytest.raises(ValueError, match="hauteur"):
-        fraction_media(100, 0)
-    with pytest.raises(ValueError, match="largeur"):
-        fraction_media(-5, 100)

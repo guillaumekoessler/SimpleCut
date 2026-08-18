@@ -1,9 +1,8 @@
 """Couche pure de l'aperçu d'intervalle : bornes de boucle et temps de vignette."""
 
-import math
-
 import pytest
 
+from tests.donnees import NON_FINIS, POSITIFS_INVALIDES
 from utils.PreviewGif import PAS_INTERVALLE, bornes_boucle_video, temps_vignette
 
 
@@ -38,7 +37,7 @@ class TestTempsVignette:
         # sinon FramePreview attrape le ValueError et vide les vignettes.
         assert temps_vignette(0.0, duree=10.0, fps=30.0) == 0.0
 
-    @pytest.mark.parametrize("t", [math.nan, math.inf, -math.inf])
+    @pytest.mark.parametrize("t", NON_FINIS)
     def test_t_non_fini(self, t):
         # Un nan traverserait min/max sans être clampé : clé de cache pourrie.
         with pytest.raises(ValueError):
@@ -48,12 +47,12 @@ class TestTempsVignette:
         # duree - 1/fps < 0 : le plancher 0 doit gagner, pas un temps négatif.
         assert temps_vignette(0.5, duree=0.02, fps=30.0) == 0.0
 
-    @pytest.mark.parametrize("duree", [0.0, -1.0, math.nan, math.inf])
+    @pytest.mark.parametrize("duree", POSITIFS_INVALIDES)
     def test_duree_invalide(self, duree):
         with pytest.raises(ValueError):
             temps_vignette(1.0, duree=duree, fps=30.0)
 
-    @pytest.mark.parametrize("fps", [0.0, -30.0, math.nan])
+    @pytest.mark.parametrize("fps", POSITIFS_INVALIDES)
     def test_fps_invalide(self, fps):
         with pytest.raises(ValueError):
             temps_vignette(1.0, duree=10.0, fps=fps)
@@ -97,14 +96,15 @@ class TestBornesBoucleVideo:
         with pytest.raises(ValueError):
             bornes_boucle_video(0.0, 10.1, duree=10.0)
 
-    @pytest.mark.parametrize("duree", [0.0, -5.0, math.nan])
+    @pytest.mark.parametrize("duree", POSITIFS_INVALIDES)
     def test_duree_invalide(self, duree):
         with pytest.raises(ValueError):
             bornes_boucle_video(0.0, 1.0, duree=duree)
 
-    def test_borne_non_finie(self):
+    @pytest.mark.parametrize("borne", NON_FINIS)
+    def test_borne_non_finie(self, borne):
         with pytest.raises(ValueError):
-            bornes_boucle_video(math.nan, 1.0, duree=10.0)
+            bornes_boucle_video(borne, 1.0, duree=10.0)
 
 
 def test_le_pas_du_slider_est_la_source_unique():

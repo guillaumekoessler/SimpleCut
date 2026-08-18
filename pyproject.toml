@@ -13,4 +13,13 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "ruff>=0.14.7",
 ]
+
+[tool.ruff.lint]
+# E : erreurs pycodestyle (dont E402, import hors du haut de fichier)
+# F : pyflakes (imports et variables morts)
+# I : ordre des imports
+select = ["E", "F", "I"]
+# E501 (longueur de ligne) : laissée au formateur, pas au linter.
+ignore = ["E501"]
