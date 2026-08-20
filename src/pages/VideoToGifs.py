@@ -1,14 +1,11 @@
-import os
-import tempfile
-from pathlib import Path
-
 import streamlit as st
-from moviepy import VideoFileClip
 
 from components.FramePreview import afficher_vignettes_bornes
+from components.GifPanel import panneau_gif
 from components.MediaLayout import colonne_media
 from components.VideoStatus import afficher_statut_video
 from utils.GifClasses import ConversionParams
+from utils.GifQuality import vitesse_par_defaut, vitesses_disponibles
 from utils.PreviewGif import PAS_INTERVALLE, bornes_boucle_video
 from utils.VideoClasses import UploadedVideo
 
@@ -18,68 +15,14 @@ current: UploadedVideo | None = st.session_state.get("uploaded_video")
 
 if current is None:
     st.info("Importez une vidéo pour commencer.", icon="🎬")
-    st.stop()  # si aucune video rien Òne s'exécute : plus de crash
+    st.stop()  # si aucune vidéo, rien ne s'exécute : plus de crash
 
 
-def _convert_video_to_gif(
-    video_path: Path,
-    output_path: Path,
-    params: ConversionParams,
-) -> Path:
-    """Convertit un segment de vidéo en GIF animé.
-
-    Args:
-        video_path: Chemin vers la vidéo source (.mov).
-        output_path: Chemin de sortie du GIF.
-        params: Paramètres de conversion.
-
-    Returns:
-        Le chemin du GIF généré.
-
-    Raises:
-        FileNotFoundError: Si la vidéo source n'existe pas.
-        ValueError: Si les paramètres dépassent la durée de la vidéo.
-    """
-    if not video_path.exists():
-        raise FileNotFoundError(f"Fichier source introuvable : {video_path}")
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    with VideoFileClip(str(video_path)) as clip:
-        if params.end_time > clip.duration:
-            raise ValueError(
-                f"end_time ({params.end_time}s) dépasse la durée de la vidéo ({clip.duration}s)"
-            )
-
-        subclip = clip.subclipped(params.start_time, params.end_time)
-
-        if params.resize_factor < 1.0:
-            subclip = subclip.resized(params.resize_factor)
-
-        subclip.write_gif(str(output_path), fps=params.fps, logger=None)
-
-    return output_path
-
-
-def _purger_ancien_gif() -> None:
-    """Fonction permettant de supprimer un fichier gif si celui-ci existe"""
-    resultat = st.session_state.get("gif_result")
-    if resultat is not None:
-        chemin, _ = resultat
-        chemin.unlink(missing_ok=True)
-        st.session_state.pop("gif_result", None)
-
-
-# Fonction du callback pour la création du gif
-def demander_generation(params: ConversionParams) -> None:
-    st.session_state["gif_request"] = params
-
-
-# Apercu video : conteneur déclaré ici (haut de page) mais rempli plus bas,
+# Aperçu vidéo : conteneur déclaré ici (haut de page) mais rempli plus bas,
 # une fois les bornes du slider connues — st.container permet ce différé.
 apercu = st.container()
 
-# selection des paramètres de reformating de la video
+# Sélection des paramètres du GIF.
 with st.container(border=True):
     st.caption("PARAMÈTRES")
 
@@ -87,7 +30,7 @@ with st.container(border=True):
     # slider mais dépendent de sa valeur.
     zone_vignettes = st.container()
 
-    start_time, end_time = st.slider(
+    debut, fin = st.slider(
         "Intervalle",
         min_value=0.0,
         max_value=float(current.duration),
@@ -97,25 +40,44 @@ with st.container(border=True):
     )
 
     with zone_vignettes:
-        afficher_vignettes_bornes(current, start_time, end_time)
+        afficher_vignettes_bornes(current, debut, fin)
 
-    col1, col2 = st.columns(2)
-    with col1:
-        fps = st.slider("FPS", 5, 30, 15, 5)
-    with col2:
-        resize_factor = st.slider("Échelle", 0.1, 1.0, 1.0, step=0.1)
+    # Les vitesses sont CALCULÉES depuis la cadence de la vidéo : on ne propose
+    # jamais de fabriquer des images que la source n'a pas, et toutes celles
+    # qu'on propose jouent à la bonne vitesse (cf. utils.GifQuality).
+    vitesses = vitesses_disponibles(current.fps)
+
+    colonne_vitesse, colonne_echelle = st.columns(2)
+    with colonne_vitesse:
+        nom_vitesse = st.segmented_control(
+            "Vitesse",
+            options=list(vitesses),
+            default=vitesse_par_defaut(vitesses),
+            # required : sans ça, recliquer l'option active la désélectionne et
+            # le widget renvoie None.
+            required=True,
+            help=(
+                "Nombre d'images par seconde. Le GIF dure toujours aussi "
+                "longtemps que le segment : « Rapide » ne l'accélère pas, il "
+                "le rend plus fluide — et plus lourd."
+            ),
+        )
+    with colonne_echelle:
+        echelle = st.slider("Échelle", 0.1, 1.0, 1.0, step=0.1)
+
+    fps = vitesses[nom_vitesse]
+    duree_segment = fin - debut
 
     st.divider()
     st.caption(
-        f"Segment : {end_time - start_time:.1f}s · FPS : {fps} · Échelle : {resize_factor}"
+        f"Segment : {duree_segment:.1f} s · {nom_vitesse} ({fps} i/s) · "
+        f"Échelle : {echelle:.0%} · ≈ {int(duree_segment * fps)} images"
     )
 
 # Remplissage différé de l'aperçu : la vidéo boucle sur la sélection.
 # floor/ceil car st.video tronque les bornes à la seconde entière — la boucle
 # englobe la sélection ; les vignettes ci-dessus portent la précision au 1/10e.
-debut_boucle, fin_boucle = bornes_boucle_video(
-    start_time, end_time, float(current.duration)
-)
+debut_boucle, fin_boucle = bornes_boucle_video(debut, fin, float(current.duration))
 with apercu, colonne_media(largeur=current.width, hauteur=current.height):
     st.video(
         str(current.path),
@@ -126,73 +88,12 @@ with apercu, colonne_media(largeur=current.width, hauteur=current.height):
         end_time=fin_boucle,
     )
 
-# création du gif en fonction des paramètres séléctionnés
+# Un segment vide ne peut pas produire de GIF : ConversionParams le refuserait,
+# et le panneau sait dire pourquoi il n'y a rien à créer.
+params = (
+    ConversionParams(start_time=debut, end_time=fin, fps=fps, resize_factor=echelle)
+    if fin > debut
+    else None
+)
 
-# On vérifie que le temps de fin est bien supérieur au temps de début
-segment_valide = end_time > start_time
-
-params = None
-if segment_valide:
-    params = ConversionParams(
-        start_time=start_time,
-        end_time=end_time,
-        fps=fps,
-        resize_factor=resize_factor,
-    )
-
-    st.button(
-        "Créer le GIF",
-        on_click=demander_generation,
-        args=(params,),  # tuple ! fige les params du run courant
-        disabled=not segment_valide,  # confort UI ; la vraie protection est l'étape 2
-    )
-
-    if st.session_state.get("gif_request") is not None:
-        params = st.session_state.pop("gif_request")  # consommé UNE fois
-
-        # mkstemp + close : on ne garde pas de handle ouvert pendant que MoviePy écrit
-        fd, chemin_str = tempfile.mkstemp(suffix=".gif")
-        os.close(fd)
-        output_path = Path(chemin_str)
-
-        # nettoyer un éventuel GIF précédent
-        _purger_ancien_gif()
-
-        with st.status("Génération du GIF…") as status:
-            try:
-                _convert_video_to_gif(current.path, output_path, params)
-            except (FileNotFoundError, ValueError) as e:
-                output_path.unlink(missing_ok=True)  # pas de GIF partiel qui traîne
-                status.update(label=f"Échec : {e}", state="error")
-            else:
-                # on rattache le résultat à L'IDENTITÉ de la vidéo courante
-                st.session_state["gif_result"] = (output_path, current.file_id)
-                status.update(label="GIF prêt ✅", state="complete")
-
-        resultat = st.session_state.get("gif_result")
-        if resultat is not None:
-            chemin, file_id = resultat
-            if file_id != current.file_id or not chemin.exists():
-                # GIF issu d'une autre vidéo (ou temporaire disparu) → on purge
-                chemin.unlink(missing_ok=True)
-                st.session_state.pop("gif_result", None)
-            else:
-                octets = (
-                    chemin.read_bytes()
-                )  # une seule lecture disque utilisée pour l'apercu et le téléchargement
-                # Ratio du GIF = ratio source (resized() est uniforme, à la
-                # troncature près : écart mesuré < 0,5 %). Dès qu'un crop / une
-                # rotation / un letterbox arrivera, passer ici les dimensions
-                # RÉELLES du GIF.
-                with colonne_media(largeur=current.width, hauteur=current.height):
-                    st.image(octets)
-                st.download_button(
-                    "Télécharger le GIF",
-                    data=octets,
-                    file_name=f"{Path(current.name).stem}.gif",
-                    mime="image/gif",
-                )
-
-
-else:
-    st.text("Veuillez élargir l'interval de temps.", text_alignment="center")
+panneau_gif(current, params)

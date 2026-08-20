@@ -83,3 +83,30 @@ def colonne_media(largeur: float, hauteur: float) -> DeltaGenerator:
     # Le rendre paramétrable invaliderait le calage — on le fige volontairement.
     _, milieu, _ = st.columns(poids)
     return milieu
+
+
+def colonne_image(largeur: float, hauteur: float) -> DeltaGenerator:
+    """Colonne centrale dimensionnée pour une IMAGE de ce ratio.
+
+    Exactement le même calage que colonne_media, SANS la règle CSS. La
+    distinction n'est pas cosmétique :
+
+      - la règle ne sert qu'aux <video>, dont Streamlit remplace le nœud quand
+        les bornes de lecture changent ; une <img> porte sa taille intrinsèque
+        et ne s'effondre jamais à 150 px ;
+      - cette règle est GLOBALE au document et la dernière émise gagne (voir
+        colonne_media). Appeler colonne_media pour afficher un GIF écraserait
+        donc le ratio de l'aperçu vidéo par celui du GIF.
+
+    Args:
+        largeur: Largeur de l'image en pixels (> 0, finie).
+        hauteur: Hauteur de l'image en pixels (> 0, finie).
+
+    Returns:
+        La colonne centrale, à utiliser comme gestionnaire de contexte.
+
+    Raises:
+        ValueError: dimensions invalides (propagée depuis utils.Layout).
+    """
+    _, milieu, _ = st.columns(poids_colonnes_media(largeur, hauteur))
+    return milieu
