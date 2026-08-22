@@ -109,34 +109,41 @@ et léger dans un autre sans que l'utilisateur puisse comprendre pourquoi. La
 prévisibilité prime sur le gain marginal.
 
 Conséquence assumée : sur du contenu à aplats, la palette locale était
-*exacte* (err 0,00) là où la globale plafonne à ~0,84. C'est structurel, pas un
+*exacte* (err 0,00) là où la globale plafonne à 1,12. C'est structurel, pas un
 défaut d'échantillonnage — chaque image prise isolément tient sous 256
 couleurs, mais leur **union** sur 50 images les dépasse. Vérifié : passer de 8 à
 50 images d'analyse ne bouge pas l'erreur d'un centième.
 
-### D2 — Quantificateur FASTOCTREE
+### D2 — Quantificateur MEDIANCUT
 
-| | Code actuel | MEDIANCUT | **FASTOCTREE** |
+| | Code actuel | **MEDIANCUT** | FASTOCTREE |
 |---|---|---|---|
-| `ecran` | 2,14 Mo · err 16,88 | 0,04 Mo · err 1,12 | **0,03 Mo · err 0,84** |
-| `degrade` | 4,54 Mo · err 16,50 | 3,55 Mo · err 1,13 | **2,16 Mo** · err 1,50 |
-| `camera` | 2,15 Mo · err 4,30 | 6,02 Mo · err 1,62 | **1,49 Mo** · err 1,72 |
+| `ecran` | 2,14 Mo · err 16,88 | 0,04 Mo · err 1,12 | 0,03 Mo · err 0,84 |
+| `degrade` | 4,54 Mo · err 16,50 | 3,55 Mo · err **1,13** | 2,16 Mo · err 1,50 |
+| `camera` | 2,15 Mo · err 4,30 | 6,02 Mo · err **1,62** | 1,49 Mo · err 1,72 |
 
-FASTOCTREE est le seul des deux qui améliore poids **et** fidélité par rapport
-au code actuel sur les trois contenus. Les cellules de l'octree s'alignent sur
-les bits de poids fort : des pixels voisins légèrement différents tombent dans
-la même cellule, donc reçoivent le même index — précisément ce que LZW
-compresse. Il construit aussi la palette environ 10× plus vite.
+MEDIANCUT alloue toujours ses 256 couleurs et ne produit pas de banding. Il
+donne la meilleure fidélité sur les dégradés continus (1,13 contre 1,50), qui
+sont le contenu où une quantification ratée se voit le plus.
 
-MEDIANCUT a été écarté malgré sa meilleure fidélité sur les dégradés (1,13
-contre 1,50) parce qu'il rend le contenu photographique bruité **2,8× plus
-lourd qu'aujourd'hui** — le symptôme même que ce travail corrige.
+FASTOCTREE a été mesuré et écarté. Il était plus léger partout — spectaculairement
+sur le photographique — mais il n'alloue que ~109 couleurs sur 256 sur un
+dégradé continu et y produit des bandes diagonales visibles. La fidélité
+colorimétrique est la contrainte dure de ce travail ; un banding visible la
+viole, un fichier plus lourd non.
 
-Faiblesse connue et acceptée : sur un dégradé continu, FASTOCTREE n'alloue que
-~109 couleurs sur 256 et produit un banding visible. Le corpus de mesure est
-synthétique (`gradients` et `testsrc2` de ffmpeg) ; `degrade` est un pire cas
-que peu de vraies sources atteignent. **À rejouer sur un média réel** si un
-banding est constaté en usage.
+**Conséquence assumée, et elle est importante** : sur du contenu photographique
+bruité, le GIF devient **2,8× plus lourd qu'aujourd'hui** (6,02 Mo contre 2,15).
+Ce n'est pas une régression du nouveau pipeline mais la fin d'une illusion : le
+code actuel est léger sur ce contenu parce que la palette WEB est un
+quantificateur brutal à 6 niveaux par canal, qui aplatit le bruit en même temps
+qu'il massacre la couleur (err 4,30 contre 1,62). Dès que la couleur devient
+fidèle, le bruit revient, et le bruit est ce que LZW compresse le plus mal.
+
+Le levier qui traite réellement ce cas est le **débruitage temporel**, mesuré à
+×3,1 sur `camera` et volontairement laissé hors périmètre (§8). C'est là qu'il
+faudra revenir si le poids du contenu photographique devient gênant — pas sur
+le choix de quantificateur.
 
 ### D3 — Images d'analyse : 16, uniformément réparties, par seeks
 
@@ -203,7 +210,7 @@ deux fois la même. La borne haute reprend la doctrine déjà posée par
 lire ffmpeg au-delà de la dernière.
 
 `construire_palette` empile l'échantillon en un montage vertical et le
-quantifie en `FASTOCTREE`, `COULEURS_GIF` couleurs.
+quantifie en `MEDIANCUT`, `COULEURS_GIF` couleurs.
 
 `appliquer_palette` fait `image.quantize(palette=..., dither=Dither.NONE)`.
 `dither=NONE` est explicite et non implicite : c'est la valeur dont dépend tout
@@ -255,11 +262,16 @@ d'UI touché, et la progression y gagne en finesse — elle ne régresse pas.
 
 | | Avant | Après |
 |---|---|---|
-| `ecran` | 2,14 Mo · err 16,88 | **0,03 Mo · err 0,84** (÷71) |
-| `degrade` | 4,54 Mo · err 16,50 | **2,16 Mo · err 1,50** (÷2,1) |
-| `camera` | 2,15 Mo · err 4,30 | **1,49 Mo · err 1,72** (÷1,4) |
+| `ecran` | 2,14 Mo · err 16,88 | **0,04 Mo · err 1,12** (÷53) |
+| `degrade` | 4,54 Mo · err 16,50 | **3,55 Mo · err 1,13** (÷1,3) |
+| `camera` | 2,15 Mo · err 4,30 | 6,02 Mo · err **1,62** (×2,8) |
 
-Plus léger et plus fidèle sur les trois contenus.
+Fidélité nettement améliorée sur les trois contenus : l'écart de couleur passe
+de 16,9 à 1,1 sur le contenu graphique.
+
+Poids divisé sur les deux contenus graphiques, **multiplié par 2,8 sur le
+photographique bruité** — cf. D2 pour pourquoi c'est le prix de la fidélité et
+non un défaut, et §8 pour le levier qui le traite.
 
 ## 7. Vérification
 
