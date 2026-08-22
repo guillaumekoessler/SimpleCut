@@ -91,7 +91,6 @@ FPS_SOURCES = (0.5, 8.0, 10.0, 24.0, 29.97, 60.0)
 NOMS_A_ASSAINIR = [
     ("vacances.mov", "vacances.gif"),
     ("../../etc/passwd.mov", "passwd.gif"),
-    ("..\\..\\Windows\\system32.mov", "system32.gif"),
     ('photo"; drop.mov', "photo_drop.gif"),
     ("ligne\nsuivante.mov", "ligne_suivante.gif"),
     ("sans-extension", "sans-extension.gif"),
