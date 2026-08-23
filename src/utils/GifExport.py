@@ -18,6 +18,25 @@ En pilotant la boucle nous-mêmes, la quantification devient rapportable :
 Bonus non recherché : une image en mode « P » pèse 1 octet par pixel au lieu de
 3, ce qui divise par trois le pic mémoire de l'export.
 
+Pourquoi l'export fait DEUX passes sur la vidéo
+-----------------------------------------------
+La palette est globale (cf. utils.GifPalette), donc il faut l'avoir construite
+avant de quantifier la première image. Une passe d'analyse la précède donc.
+
+Elle ne décode pas le segment en entier : elle prélève 16 images par `get_frame`
+à des instants calculés. Le décodage linéaire aurait suivi la longueur du
+segment, les seeks non — c'est le point, plus que le gain brut :
+
+    50 images  : linéaire 0,37 s | 16 seeks 0,21 s
+    100 images : linéaire 0,62 s | 16 seeks 0,21 s
+
+Sur un segment de 30 s à 20 i/s le linéaire coûterait ~4 s, les seeks toujours
+0,2 à 0,3 s.
+
+Ce découpage préserve aussi le pic mémoire : analyser impose des images RGB à
+3 octets par pixel, mais seules 16 sont retenues, et plafonnées en largeur par
+utils.GifPalette. La passe de quantification, elle, reste en flux.
+
 Couche MoviePy/Pillow : ce module décode et écrit des pixels, mais ne connaît
 ni Streamlit ni la notion de session — il s'éprouve donc sans AppTest.
 """
@@ -26,15 +45,32 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from enum import StrEnum
 from pathlib import Path
 
 from moviepy import VideoFileClip
 from PIL import Image
 
 from utils.GifClasses import ConversionParams, GifGenere
+from utils.GifPalette import appliquer_palette, construire_palette, instants_analyse
 
-# Un GIF n'adresse que 256 couleurs par image : c'est le format qui l'impose.
-COULEURS_GIF = 256
+
+class Phase(StrEnum):
+    """Étape d'export en cours, telle qu'annoncée au rapporteur.
+
+    L'export ne se déroule plus en un seul mouvement : nommer la phase permet à
+    l'appelant de libeller sa progression au lieu d'afficher un compteur dont le
+    total change en cours de route.
+    """
+
+    ANALYSE = "analyse"
+    QUANTIFICATION = "quantification"
+    ASSEMBLAGE = "assemblage"
+
+
+# Le rapporteur reçoit (phase, index, total) après chaque unité de travail.
+# Contrat : `1 <= index <= total` et `total >= 1`, dans chaque phase.
+Rapporteur = Callable[[Phase, int, int], None]
 
 # --- Assainissement du nom de téléchargement -------------------------------
 # Tout ce qui n'est ni lettre, ni chiffre, ni « . - _ » devient un souligné.
@@ -84,7 +120,7 @@ def convertir_en_gif(
     chemin_source: Path,
     chemin_sortie: Path,
     params: ConversionParams,
-    rapporter: Callable[[int, int], None] | None = None,
+    rapporter: Rapporteur | None = None,
 ) -> GifGenere:
     """Écrit le segment demandé sous forme de GIF animé.
 
@@ -100,7 +136,9 @@ def convertir_en_gif(
             ConversionParams à la construction. `params.fps` doit être un
             diviseur de 100 (cf. utils.GifQuality), sans quoi le GIF jouera
             plus vite que la vidéo.
-        rapporter: Appelée après chaque image quantifiée, avec (index, total).
+        rapporter: Appelée après chaque unité de travail, avec
+            (phase, index, total). Le total est propre à la phase : les images
+            analysées ne se comptent pas avec les images quantifiées.
             Contrat : `1 <= index <= total` et `total >= 1`.
 
     Returns:
@@ -130,8 +168,13 @@ def convertir_en_gif(
                 )
 
             segment = clip.subclipped(params.start_time, params.end_time)
-            if params.resize_factor < 1.0:
-                segment = segment.resized(params.resize_factor)
+
+            # ConversionParams est SEUL à décider des dimensions : elles
+            # combinent l'échelle demandée et le plafond du format, et le
+            # panneau s'appuie sur le même calcul pour son alerte mémoire.
+            cible = params.dimensions_sortie(clip.w, clip.h)
+            if cible != (clip.w, clip.h):
+                segment = segment.resized(cible)
 
             # Nombre d'images que la boucle va produire. Même arithmétique que
             # iter_frames : c'est un compte exact, pas une estimation.
@@ -145,20 +188,41 @@ def convertir_en_gif(
                     f"{params.fps} i/s ne produit aucune image."
                 )
 
-            images = _quantifier(segment, params.fps, a_produire, rapporter)
+            # L'analyse vient APRÈS le garde-fou ci-dessus : un segment
+            # dégénéré doit échouer avant qu'on décode quoi que ce soit.
+            palette = _analyser(segment, params.fps, rapporter)
+            images = _quantifier(segment, params.fps, a_produire, palette, rapporter)
             largeur, hauteur = segment.size
+
+        if rapporter is not None:
+            # L'assemblage est fait d'un bloc par Pillow, sans crochet possible :
+            # on ne peut pas le mesurer, seulement le nommer. Le taire laisserait
+            # l'application paraître figée pendant environ un tiers du temps.
+            rapporter(Phase.ASSEMBLAGE, 1, 1)
 
         # duration : délai d'affichage en millisecondes. params.fps divisant
         # 100, c'est un multiple de 10 — le seul cas où le GIF joue juste.
-        # loop=0 : boucle infinie. disposal=2 : chaque image efface la
-        # précédente, ce qui évite les traînées si les palettes diffèrent.
+        # loop=0 : boucle infinie.
+        #
+        # Pas de disposal=2 : il demandait à chaque image d'effacer la
+        # précédente, ce qui interdisait à Pillow de n'encoder que le rectangle
+        # modifié (mesuré sur un fond fixe : 0,17 Mo contre 0,06 Mo). Il ne
+        # servait qu'à éviter les traînées entre palettes différentes — or la
+        # palette est désormais unique, donc les palettes ne diffèrent jamais.
+        #
+        # palette= est OBLIGATOIRE et n'est pas une redondance : sans lui,
+        # _write_multiple_frames pose `include_color_table = True` sur chaque
+        # image delta et réécrit une table de couleurs par image, sans voir
+        # qu'elles partagent déjà la même. Mesuré : 49 tables locales écrites
+        # pour rien, et 3 à 13 % du fichier selon le contenu, à couleur
+        # rigoureusement identique.
         images[0].save(
             chemin_sortie,
             save_all=True,
             append_images=images[1:],
             duration=1000 // params.fps,
             loop=0,
-            disposal=2,
+            palette=palette.getpalette(),
         )
 
         nb_images = _relire_nb_images(chemin_sortie)
@@ -178,32 +242,49 @@ def convertir_en_gif(
     )
 
 
+def _analyser(segment, fps: int, rapporter: Rapporteur | None) -> Image.Image:
+    """Construit la palette globale à partir d'images prélevées sur le segment.
+
+    Seule cette passe manipule des images RGB, et elle n'en retient que 16 —
+    utils.GifPalette les plafonne en largeur, de sorte que son pic mémoire est
+    constant quelle que soit la résolution de la source.
+    """
+    instants = instants_analyse(segment.duration, fps)
+    echantillon: list[Image.Image] = []
+
+    for index, instant in enumerate(instants, start=1):
+        echantillon.append(Image.fromarray(segment.get_frame(instant)))
+        if rapporter is not None:
+            rapporter(Phase.ANALYSE, index, len(instants))
+
+    return construire_palette(echantillon)
+
+
 def _quantifier(
     segment,
     fps: int,
     total: int,
-    rapporter: Callable[[int, int], None] | None,
+    palette: Image.Image,
+    rapporter: Rapporteur | None,
 ) -> list[Image.Image]:
-    """Décode chaque image du segment et la réduit à 256 couleurs.
+    """Décode chaque image du segment et la réduit à la palette globale.
 
     C'est ici qu'est le gros du travail, donc ici que la progression a un sens
-    (cf. l'en-tête du module). Chaque image reçoit sa PROPRE palette adaptative,
-    ce qui est le mode nominal du format : un GIF porte une table de couleurs
-    locale par image.
+    (cf. l'en-tête du module). Toutes les images partagent la MÊME table de
+    couleurs : c'est ce qui supprime le scintillement de palette et ce qui rend
+    exploitable le delta inter-images à l'écriture.
+
+    En flux, une image à la fois : ce qui s'accumule est en mode « P », à
+    1 octet par pixel.
     """
     images: list[Image.Image] = []
 
     for index, frame in enumerate(
         segment.iter_frames(fps=fps, dtype="uint8", logger=None), start=1
     ):
-        images.append(
-            Image.fromarray(frame).convert(
-                "P",
-                # palette=Image.ADAPTIVE, colors=COULEURS_GIF
-            )
-        )
+        images.append(appliquer_palette(Image.fromarray(frame), palette))
         if rapporter is not None:
-            rapporter(index, total)
+            rapporter(Phase.QUANTIFICATION, index, total)
 
     return images
 

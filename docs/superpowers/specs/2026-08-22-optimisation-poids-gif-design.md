@@ -114,36 +114,33 @@ défaut d'échantillonnage — chaque image prise isolément tient sous 256
 couleurs, mais leur **union** sur 50 images les dépasse. Vérifié : passer de 8 à
 50 images d'analyse ne bouge pas l'erreur d'un centième.
 
-### D2 — Quantificateur MEDIANCUT
+### D2 — Quantificateur MAXCOVERAGE
 
-| | Code actuel | **MEDIANCUT** | FASTOCTREE |
+Trois candidats, mesurés avec `kmeans=1` (cf. D5) sur quatre contenus :
+
+| | MEDIANCUT | **MAXCOVERAGE** | FASTOCTREE |
 |---|---|---|---|
-| `ecran` | 2,14 Mo · err 16,88 | 0,04 Mo · err 1,12 | 0,03 Mo · err 0,84 |
-| `degrade` | 4,54 Mo · err 16,50 | 3,55 Mo · err **1,13** | 2,16 Mo · err 1,50 |
-| `camera` | 2,15 Mo · err 4,30 | 6,02 Mo · err **1,62** | 1,49 Mo · err 1,72 |
+| vidéo réelle | 10,59 Mo · err 2,89 | **9,53 Mo** · err 3,10 | 9,44 Mo · err 3,40 |
+| `degrade` | 3,38 Mo · err 0,99 | **3,35 Mo · err 0,88** | 3,57 Mo · err 3,38 |
+| `camera` | 5,49 Mo · err 1,25 | **3,85 Mo** · err 1,48 | — |
+| `ecran` | 0,03 Mo · err 1,12 | identique | identique |
 
-MEDIANCUT alloue toujours ses 256 couleurs et ne produit pas de banding. Il
-donne la meilleure fidélité sur les dégradés continus (1,13 contre 1,50), qui
-sont le contenu où une quantification ratée se voit le plus.
+MEDIANCUT concentre ses entrées là où les pixels sont denses, ce qui minimise
+l'erreur mais maximise l'entropie de la carte d'index. MAXCOVERAGE les répartit
+pour **couvrir** l'espace des couleurs : les entrées étant plus écartées,
+davantage de pixels voisins tombent sur la même, ce qui allonge les suites
+d'index identiques — la seule chose que LZW sache compresser. Le gain est de
+10 % sur du photographique, 30 % sur du bruité, et l'erreur baisse même sur les
+dégradés.
 
-FASTOCTREE a été mesuré et écarté. Il était plus léger partout — spectaculairement
-sur le photographique — mais il n'alloue que ~109 couleurs sur 256 sur un
-dégradé continu et y produit des bandes diagonales visibles. La fidélité
-colorimétrique est la contrainte dure de ce travail ; un banding visible la
-viole, un fichier plus lourd non.
+FASTOCTREE reste écarté : plus léger encore, mais il n'alloue que ~109 couleurs
+sur 256 sur un dégradé continu et y produit des bandes visibles.
 
-**Conséquence assumée, et elle est importante** : sur du contenu photographique
-bruité, le GIF devient **2,8× plus lourd qu'aujourd'hui** (6,02 Mo contre 2,15).
-Ce n'est pas une régression du nouveau pipeline mais la fin d'une illusion : le
-code actuel est léger sur ce contenu parce que la palette WEB est un
-quantificateur brutal à 6 niveaux par canal, qui aplatit le bruit en même temps
-qu'il massacre la couleur (err 4,30 contre 1,62). Dès que la couleur devient
-fidèle, le bruit revient, et le bruit est ce que LZW compresse le plus mal.
-
-Le levier qui traite réellement ce cas est le **débruitage temporel**, mesuré à
-×3,1 sur `camera` et volontairement laissé hors périmètre (§8). C'est là qu'il
-faudra revenir si le poids du contenu photographique devient gênant — pas sur
-le choix de quantificateur.
+Une variante « palette étirée en contraste » (entrées écartées du gris moyen
+après coup) a été mesurée et **rejetée** : très efficace sur le poids (−37 % sur
+`degrade`, −78 % sur `camera`) mais elle fausse les couleurs dès que le contenu
+est plat — sur `ecran` elle rend +75 % de saturation par rapport à la source.
+C'est un parti-pris esthétique, pas une optimisation.
 
 ### D3 — Images d'analyse : 16, uniformément réparties, par seeks
 
@@ -163,20 +160,127 @@ Mesuré sur `degrade` puis `camera`, segment de 5 s :
 Le linéaire suit la longueur du segment ; les seeks non. Sur un segment de 30 s
 à 20 i/s le linéaire coûterait ~4 s, les seeks toujours 0,2 à 0,3 s.
 
-### D4 — Analyse plafonnée à 480 px
+### D4 — Analyse plafonnée à 240 px
 
-Les images d'analyse sont réduites à 480 px de large au plus. Vérifié : la
-palette construite sur des images réduites vaut celle construite en plein
-format (`camera` 6,01 Mo / err 1,65 contre 6,12 / 1,53 ; `degrade` 3,53 / 0,84
-contre 3,55 / 1,02 — donc parfois meilleure).
+Deux rôles, et le second est devenu le plus contraignant.
 
-L'enjeu est un **invariant mémoire** : sonder impose de tenir des images RGB, à
-3 octets par pixel, alors que la passe de quantification travaille en mode « P »
-à 1 octet. Sans plafond, 16 images de 1080p pèseraient 150 Mo et annuleraient
-le gain revendiqué par l'en-tête de `GifExport`. Avec plafond, le pic d'analyse
-est d'environ 13 Mo (images + montage), **constant quelle que soit la source**.
+**Invariant mémoire** : analyser impose de tenir des images RGB à 3 octets par
+pixel, quand la quantification travaille en mode « P » à 1 octet. Le pic
+d'analyse reste constant quelle que soit la résolution de la source.
 
-### D5 — Rejetés après mesure
+**Coût de l'affinage** : k-moyennes (D5) tourne sur le montage, donc son temps
+suit la surface. Mesuré sur la vidéo réelle, montage de 16 images :
+
+| largeur d'analyse | surface | temps palette | poids | saturation |
+|---|---:|---:|---:|---:|
+| 480 px | 2,07 Mpx | 10,81 s | 5,53 Mo | −0,8 % |
+| **240 px** | 0,52 Mpx | **2,68 s** | **5,44 Mo** | **−0,4 %** |
+| 160 px | 0,23 Mpx | 1,28 s | 5,44 Mo | −0,4 % |
+
+La palette n'y perd rien, et gagne même un peu. Le montage n'a pas à être
+fidèle, il doit être **représentatif** : un sous-échantillonnage d'un pixel sur
+quatre l'est autant que l'image entière. 160 px conviendrait aussi ; 240 px est
+retenu comme marge de sûreté sur des contenus à détails fins.
+
+### D5 — Affinage k-moyennes, et sous-échantillonnage sans moyennage
+
+Ajouté après constat sur média réel : les couleurs sortaient ternes. Cause
+racine mesurée, deux contributeurs, aucun lié au décodage (vérifié : MoviePy
+0,2878 contre ffmpeg 0,2942, et forcer la plage complète ne change rien).
+
+**MEDIANCUT retient la MOYENNE de chacune de ses 256 boîtes.** Une moyenne est
+tirée vers le centre : aucune entrée n'atteint les couleurs les plus saturées ni
+les extrêmes de luminance. Sur une vidéo de vigne, la palette était bornée à
+[6, 250] quand la source va de 0 à 255. `kmeans=1` corrige — au-delà de 1,
+Pillow ne bouge plus, c'est un interrupteur et non un compteur d'itérations.
+
+**La réduction BOX des images d'analyse rétrécissait le gamut avant même la
+quantification** : moyenner un pixel saturé avec son voisin plus terne fait
+disparaître l'extrême de l'échantillon. `NEAREST` prélève sans calculer, donc
+chaque couleur du montage existe réellement dans la source.
+
+| Sur la vidéo réelle | saturation | écart | poids |
+|---|---:|---:|---:|
+| BOX, `kmeans=0` (avant) | −2,8 % | 3,27 | 10,81 Mo |
+| BOX, `kmeans=1` | −0,9 % | 2,90 | 10,62 Mo |
+| NEAREST, `kmeans=0` | −2,1 % | 3,24 | 10,80 Mo |
+| **NEAREST, `kmeans=1`** | **−0,5 %** | **2,89** | **10,59 Mo** |
+
+Coût : la palette passe de 0,16 s à 1,25 s. Accepté explicitement — du temps
+d'export contre de la qualité et du poids.
+
+**Leçon de méthode** : l'écart absolu moyen, seule métrique de la §2, est
+AVEUGLE à ce défaut. Tirer chaque couleur de 3 % vers le gris produit une erreur
+moyenne minuscule et une image visiblement terne. C'est pourquoi D4 avait validé
+la réduction BOX à tort. Toute évaluation de quantification doit désormais
+mesurer la **saturation** en plus de l'écart.
+
+Écarté au passage : supprimer le plafond `LARGEUR_ANALYSE` gagnerait 0,2 point
+de saturation de plus, contre ~200 Mo de pic mémoire transitoire sur du 1080p.
+
+### D6 — `palette=` passé explicitement à `save()`
+
+Dans `GifImagePlugin._write_multiple_frames` :
+
+```python
+else:
+    # compress difference
+    if not palette:
+        frame_data.encoderinfo["include_color_table"] = True
+```
+
+Sans `palette=`, Pillow écrit une table de couleurs **par image delta** sans
+voir qu'elles partagent déjà la même. Mesuré : 49 tables locales écrites pour
+rien, à couleur rigoureusement identique — 3 à 13 % du fichier selon le contenu.
+
+L'argument est donc **obligatoire**, pas une redondance de confort : c'est lui
+qui fait exister la palette globale dans le fichier produit, pas seulement dans
+le code qui le produit.
+
+### D7 — Le curseur porte sur la largeur de sortie, en pixels
+
+Le format n'offre aucune compression exploitable sur du contenu photographique.
+Mesuré sur la vidéo réelle : la carte d'index porte **7,89 bits d'entropie sur 8
+possibles**, 82 % des pixels diffèrent de leur voisin horizontal, 88 % changent
+d'une image à l'autre. Le plancher théorique au premier ordre est de 11,36 Mo et
+nous sortions à 10,59 — donc **déjà sous ce plancher**. Aucune astuce d'encodage
+ne reste disponible, ce que confirme la comparaison : au format identique,
+ffmpeg `palettegen` / `paletteuse` sort à 5,82 Mo là où nous sortons à 5,44.
+
+Le poids suit donc le nombre de pixels de façon quasi linéaire, et c'est le seul
+levier qui ne coûte **aucune** couleur :
+
+| curseur | sortie | poids | octet/pixel | écart |
+|---|---|---:|---:|---:|
+| 160 px | 160×90 | 0,66 Mo | 0,92 | 3,1 |
+| 240 px | 240×135 | 1,43 Mo | 0,89 | 3,1 |
+| 320 px | 320×180 | 2,48 Mo | 0,86 | 3,1 |
+| 400 px | 400×225 | 3,83 Mo | 0,85 | 3,1 |
+| 480 px | 480×270 | 5,44 Mo | 0,84 | 3,1 |
+
+Le coût par pixel ne bouge pas, et l'écart de couleur non plus. D'où le modèle
+que la page peut annoncer sans encoder :
+
+**poids ≈ largeur × hauteur × nombre d'images × 0,85 octet**
+
+**Des pixels et non un pourcentage.** L'ancien curseur « Échelle » exprimait une
+fraction de la source, ce qui posait deux problèmes : il se lisait différemment
+selon la vidéo importée, et surtout il créait une **zone morte** dès que la
+source dépassait le plafond — sur une source 1080p, il ne produisait aucun effet
+de 100 % à 25 %. Le curseur « Largeur » nomme exactement ce qu'il produit, et
+chacune de ses positions donne des dimensions distinctes, quelle que soit la
+source (vérifié sur 640 px et 1920 px).
+
+`largeurs_disponibles(largeur_source)` plafonne le catalogue par la source,
+exactement comme `GifQuality.vitesses_disponibles` le fait par la cadence : on
+ne propose jamais d'agrandir. La largeur maximale atteignable y figure toujours,
+même hors catalogue — une source de 300 px doit pouvoir sortir en 300 px.
+
+`ConversionParams.dimensions_sortie` reste la source unique des dimensions :
+l'export s'en sert pour redimensionner, le panneau pour son alerte mémoire, la
+page pour annoncer la taille avant le clic.
+
+### D8 — Rejetés après mesure
 
 - `optimize=True` à l'écriture : gain nul sur les trois contenus.
 - Augmenter le nombre d'images d'analyse au-delà de 16 : n'améliore pas
@@ -184,6 +288,16 @@ est d'environ 13 Mo (images + montage), **constant quelle que soit la source**.
 - Tramage Bayer : pertinent seulement si l'on réintroduit un jour du tramage.
   Retenir alors Bayer et non Floyd-Steinberg — motif périodique donc
   compressible : +0,01 Mo contre +0,58 Mo sur `ecran`.
+- `optimize=True` **avec un index de transparence libre** (palette à 255
+  couleurs au lieu de 256, ce qui laisse Pillow remplir de transparent les
+  pixels inchangés) : hypothèse formée d'après le code de
+  `_write_multiple_frames`, mesurée, **fausse ici** — 10,56 Mo contre 10,59. Le
+  delta transparent ne paie que si des pixels sont identiques d'une image à
+  l'autre, or 88 % changent sur du contenu filmé à main levée.
+- Lissage spatial avant quantification : l'erreur explose (2,89 → 13,05 pour
+  −21 % de poids). Mauvais échange.
+- Débruitage temporel `hqdn3d` : efficace sur une source fixe, inopérant ici —
+  la caméra bouge.
 
 ## 4. Architecture
 
@@ -227,8 +341,8 @@ Signature et contrat de propriété du fichier de sortie **inchangés**.
 2. **Quantification** — inchangée dans son principe : en flux, une image à la
    fois, `appliquer_palette`, progression rapportée par image. C'est ce que la
    double passe sert à préserver.
-3. **Assemblage** — `images[0].save(...)` **sans `disposal=2`**. `duration`,
-   `loop=0` et `save_all` inchangés.
+3. **Assemblage** — `images[0].save(...)` **sans `disposal=2`** et **avec
+   `palette=`** (cf. D6). `duration`, `loop=0` et `save_all` inchangés.
 
 Ordre impératif : le garde-fou `a_produire < 1` reste **avant** la passe
 d'analyse, pour qu'un segment dégénéré échoue avant tout travail.
@@ -258,20 +372,21 @@ d'UI touché, et la progression y gagne en finesse — elle ne régresse pas.
 - `SEUIL_ALERTE_PIXELS` dans `GifPanel` : toujours valide.
 - Aucune évolution de `ConversionParams` : l'incrément n'ajoute aucun réglage.
 
-## 6. Résultat attendu
+## 6. Résultat obtenu
 
-| | Avant | Après |
+Relevé via `convertir_en_gif`, segment de 5 s à 10 i/s, échelle demandée 100 % :
+
+| | Avant (code d'origine) | Après |
 |---|---|---|
-| `ecran` | 2,14 Mo · err 16,88 | **0,04 Mo · err 1,12** (÷53) |
-| `degrade` | 4,54 Mo · err 16,50 | **3,55 Mo · err 1,13** (÷1,3) |
-| `camera` | 2,15 Mo · err 4,30 | 6,02 Mo · err **1,62** (×2,8) |
+| **vidéo réelle** 640×360 | 5,54 Mo · err 14,58 | **5,44 Mo · err 3,13** en 480×270 |
+| `ecran` 1280×720 | 2,14 Mo · err 16,88 | **0,03 Mo** en 480×270 |
+| `degrade` 1280×720 | 4,54 Mo · err 16,50 | **2,04 Mo · err 1,15** |
+| `camera` 1280×720 | 2,15 Mo · err 4,30 | **1,49 Mo · err 1,51** |
 
-Fidélité nettement améliorée sur les trois contenus : l'écart de couleur passe
-de 16,9 à 1,1 sur le contenu graphique.
+Plus léger **et** plus fidèle sur les quatre contenus. Sur la vidéo réelle, le
+poids est celui de l'origine avec un écart de couleur 4,7 fois moindre.
 
-Poids divisé sur les deux contenus graphiques, **multiplié par 2,8 sur le
-photographique bruité** — cf. D2 pour pourquoi c'est le prix de la fidélité et
-non un défaut, et §8 pour le levier qui le traite.
+Durée d'export sur la vidéo réelle : 3,0 s, dont 2,7 s d'affinage de palette.
 
 ## 7. Vérification
 

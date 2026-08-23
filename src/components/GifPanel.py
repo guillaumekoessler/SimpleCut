@@ -10,7 +10,7 @@ import streamlit as st
 
 from components.MediaLayout import colonne_image
 from utils.GifClasses import ConversionParams, GifGenere
-from utils.GifExport import convertir_en_gif, nom_fichier_gif
+from utils.GifExport import Phase, convertir_en_gif, nom_fichier_gif
 from utils.GifStore import CacheGifs, CleGif
 from utils.VideoClasses import UploadedVideo
 
@@ -21,6 +21,12 @@ CLE_CACHE = "cache_gifs"
 # toutes les images en mémoire (1 octet par pixel en mode palette) : 200 Mpx,
 # c'est ~200 Mo de pic, soit 5 s de 1080p à 20 i/s.
 SEUIL_ALERTE_PIXELS = 200_000_000
+
+# Part de la barre réservée à la passe d'analyse. Approximation assumée, mais
+# pas arbitraire : l'analyse coûte 0,2 à 0,3 s quand la quantification se compte
+# en secondes. Sa vraie fonction est d'empêcher la barre de rester à zéro
+# pendant que le libellé, lui, avance.
+PART_ANALYSE = 0.1
 
 
 @st.fragment
@@ -114,15 +120,24 @@ def _generer(
     with st.status("Génération du GIF…", expanded=True) as statut:
         barre = st.progress(0.0, text="Lecture de la vidéo…")
 
-        def rapporter(index: int, total: int) -> None:
-            if index >= total:
-                # Le décodage et la quantification sont finis ; il reste
-                # l'assemblage du fichier, que Pillow fait d'un bloc (environ
-                # un tiers du temps). Le nommer vaut mieux que laisser la barre
-                # pleine devant une application qui semble figée.
-                barre.progress(1.0, text="Assemblage du GIF…")
+        def rapporter(phase: Phase, index: int, total: int) -> None:
+            # Chaque phase a son propre total : les deux compteurs ne
+            # s'additionnent pas, ils se succèdent sur la même barre.
+            if phase is Phase.ANALYSE:
+                barre.progress(
+                    PART_ANALYSE * index / total,
+                    text=f"Analyse des couleurs — {index} sur {total}",
+                )
+            elif phase is Phase.QUANTIFICATION:
+                barre.progress(
+                    PART_ANALYSE + (1.0 - PART_ANALYSE) * index / total,
+                    text=f"Image {index} sur {total}",
+                )
             else:
-                barre.progress(index / total, text=f"Image {index} sur {total}")
+                # L'assemblage que Pillow fait d'un bloc (environ un tiers du
+                # temps). Le nommer vaut mieux que laisser la barre pleine
+                # devant une application qui semble figée.
+                barre.progress(1.0, text="Assemblage du GIF…")
 
         try:
             gif = convertir_en_gif(video.path, sortie, params, rapporter=rapporter)
@@ -152,8 +167,10 @@ def _alerter_si_lourd(video: UploadedVideo, params: ConversionParams) -> None:
     grandit avec largeur × hauteur × nombre d'images. Mieux vaut le dire avant
     plutôt que de laisser l'onglet ramer.
     """
-    largeur = video.width * params.resize_factor
-    hauteur = video.height * params.resize_factor
+    # Même calcul que l'export : depuis l'arrivée du plafond de largeur,
+    # multiplier naïvement par resize_factor surestimerait le pic sur toute
+    # source plus large que le plafond, et l'alerte crierait pour rien.
+    largeur, hauteur = params.dimensions_sortie(video.width, video.height)
     pixels = largeur * hauteur * params.duration * params.fps
 
     if pixels > SEUIL_ALERTE_PIXELS:
@@ -182,7 +199,17 @@ def _afficher(video: UploadedVideo, gif: GifGenere) -> None:
     # Dimensions du GIF LUI-MÊME : la page passait ici celles de la source, ce
     # qui n'était juste que tant que le redimensionnement restait uniforme.
     with colonne_image(largeur=gif.largeur, hauteur=gif.hauteur):
-        st.image(octets)
+        # width="stretch" et non le défaut "content" : une <img> laissée à sa
+        # taille intrinsèque s'afficherait à la largeur du FICHIER — 480 px
+        # depuis le plafond de sortie — alors que st.video, lui, remplit
+        # toujours sa colonne. Le GIF paraissait donc plus petit que la vidéo
+        # dont il sort, alors que les deux colonnes ont rigoureusement la même
+        # largeur : utils.Layout ne cale que sur le RATIO, jamais sur la taille
+        # absolue, et le ratio est conservé par ConversionParams.
+        #
+        # Étirement d'affichage uniquement : le fichier n'est pas retouché, et
+        # son poids ne bouge pas d'un octet.
+        st.image(octets, width="stretch")
 
     with st.container(horizontal=True, horizontal_alignment="center"):
         st.download_button(

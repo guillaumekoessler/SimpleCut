@@ -4,7 +4,7 @@ from components.FramePreview import afficher_vignettes_bornes
 from components.GifPanel import panneau_gif
 from components.MediaLayout import colonne_media
 from components.VideoStatus import afficher_statut_video
-from utils.GifClasses import ConversionParams
+from utils.GifClasses import ConversionParams, largeurs_disponibles
 from utils.GifQuality import vitesse_par_defaut, vitesses_disponibles
 from utils.PreviewGif import PAS_INTERVALLE, bornes_boucle_video
 from utils.VideoClasses import UploadedVideo
@@ -47,7 +47,7 @@ with st.container(border=True):
     # qu'on propose jouent à la bonne vitesse (cf. utils.GifQuality).
     vitesses = vitesses_disponibles(current.fps)
 
-    colonne_vitesse, colonne_echelle = st.columns(2)
+    colonne_vitesse, colonne_largeur = st.columns(2)
     with colonne_vitesse:
         nom_vitesse = st.segmented_control(
             "Vitesse",
@@ -62,16 +62,35 @@ with st.container(border=True):
                 "le rend plus fluide — et plus lourd."
             ),
         )
-    with colonne_echelle:
-        echelle = st.slider("Échelle", 0.1, 1.0, 1.0, step=0.1)
+    # Les largeurs sont CALCULÉES depuis celle de la vidéo, comme les vitesses
+    # le sont depuis sa cadence : on ne propose jamais d'agrandir.
+    largeurs = largeurs_disponibles(current.width)
+    with colonne_largeur:
+        largeur_gif = st.select_slider(
+            "Largeur",
+            options=largeurs,
+            value=largeurs[-1],
+            format_func=lambda px: f"{px} px",
+            help=(
+                "Largeur du GIF ; la hauteur suit le format de la vidéo. "
+                "C'est le réglage qui pèse le plus : diviser la largeur par "
+                "deux divise le poids par quatre, sans altérer les couleurs."
+            ),
+        )
 
     fps = vitesses[nom_vitesse]
     duree_segment = fin - debut
 
     st.divider()
+    # Dimensions calculées par ConversionParams et non ici : la page annonce
+    # exactement ce que l'export produira, jamais une estimation parallèle.
+    largeur_sortie, hauteur_sortie = ConversionParams(
+        start_time=0.0, end_time=1.0, fps=fps, largeur_cible=largeur_gif
+    ).dimensions_sortie(current.width, current.height)
     st.caption(
         f"Segment : {duree_segment:.1f} s · {nom_vitesse} ({fps} i/s) · "
-        f"Échelle : {echelle:.0%} · ≈ {int(duree_segment * fps)} images"
+        f"{largeur_sortie} × {hauteur_sortie} px · "
+        f"≈ {int(duree_segment * fps)} images"
     )
 
 # Remplissage différé de l'aperçu : la vidéo boucle sur la sélection.
@@ -91,7 +110,9 @@ with apercu, colonne_media(largeur=current.width, hauteur=current.height):
 # Un segment vide ne peut pas produire de GIF : ConversionParams le refuserait,
 # et le panneau sait dire pourquoi il n'y a rien à créer.
 params = (
-    ConversionParams(start_time=debut, end_time=fin, fps=fps, resize_factor=echelle)
+    ConversionParams(
+        start_time=debut, end_time=fin, fps=fps, largeur_cible=largeur_gif
+    )
     if fin > debut
     else None
 )
