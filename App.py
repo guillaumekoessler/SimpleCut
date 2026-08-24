@@ -12,7 +12,7 @@ import streamlit as st
 st.set_page_config(
     page_title="SimpleCut",
     layout="centered",
-    page_icon="👋",
+    page_icon="🎞️",
 )
 
 home = st.Page(
