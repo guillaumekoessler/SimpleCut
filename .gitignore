@@ -34,6 +34,7 @@ prof/
 Thumbs.db
 
 # Fichiers utilisateur / outputs temporaires
+notebooks/
 *.mov
 *.gif
 !tests/fixtures/*.mov
