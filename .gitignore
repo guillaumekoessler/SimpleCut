@@ -23,9 +23,11 @@ htmlcov/
 .idea/
 *.swp
 
-# Claude Code (local settings, historique, mémoires perso)
-.claude/
-CLAUDE.md
+# Claude Code
+# CLAUDE.md et .claude/rules/ sont versionnés : ils décrivent le projet.
+# Tout le reste de .claude/ est local (réglages machine, historique).
+.claude/*
+!.claude/rules/
 CLAUDE.local.md
 prof/
 
