@@ -1,4 +1,4 @@
-"""Module ayant pour objectif de centraliser les fonctions mathématiques utiles pour l'ensemble du projet"""
+"""Validations numériques partagées : finitude et positivité des grandeurs."""
 
 from __future__ import annotations
 

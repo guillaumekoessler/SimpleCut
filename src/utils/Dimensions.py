@@ -1,4 +1,4 @@
-"""Dimensions d'affichage des médias (en pixels)."""
+"""Réglages d'affichage des médias : vignette en pixels, calage en fractions."""
 
 # Vignettes
 LARGEUR_VIGNETTE_SIDEBAR = 56

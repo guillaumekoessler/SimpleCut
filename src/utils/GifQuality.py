@@ -1,7 +1,7 @@
 """Cadences GIF : trois vitesses nommées, aucune ne dérive.
 
 Contrainte physique du format : un GIF stocke le délai d'affichage de chaque
-image en CENTIÈMES de seconde. Pillow — l'encodeur qu'utilise MoviePy 2.x —
+image en CENTIÈMES de seconde. Pillow — l'encodeur qu'appelle utils.GifExport —
 tronque `1000/fps` à la dizaine de millisecondes inférieure. Une cadence dont
 `100/fps` n'est pas entier produit donc un GIF qui ne joue PAS à la vitesse
 demandée. Mesuré sur MoviePy 2.2.1, délais relus dans le fichier produit :

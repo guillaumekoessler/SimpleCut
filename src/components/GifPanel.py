@@ -168,7 +168,7 @@ def _alerter_si_lourd(video: UploadedVideo, params: ConversionParams) -> None:
     plutôt que de laisser l'onglet ramer.
     """
     # Même calcul que l'export : depuis l'arrivée du plafond de largeur,
-    # multiplier naïvement par resize_factor surestimerait le pic sur toute
+    # multiplier naïvement par l'échelle demandée surestimerait le pic sur toute
     # source plus large que le plafond, et l'alerte crierait pour rien.
     largeur, hauteur = params.dimensions_sortie(video.width, video.height)
     pixels = largeur * hauteur * params.duration * params.fps

@@ -6,7 +6,7 @@ Le format autorise une table de couleurs locale par image, et c'est ce que fait
 Pillow par défaut. Deux raisons de ne pas s'en contenter :
 
   - **le scintillement** : une palette recalculée par image ne retient pas
-    exactement les mêmes 256 couleurs d'une image à l'autre, et l'ensemble pulse
+    exactement les mêmes couleurs d'une image à l'autre, et l'ensemble pulse
     légèrement ;
   - **le delta inter-images** : Pillow ne réencode que le rectangle modifié
     d'une image à la suivante, mais deux images aux palettes différentes n'ont
@@ -43,13 +43,15 @@ from PIL import Image
 from utils.MathsVerif import _valider_positive_finite
 
 # Un GIF n'adresse que 256 couleurs par image : c'est le format qui l'impose.
-# On descent à 128 pour réduire la taille du fichier, et c'est suffisant pour un GIF animé
+# On descend en dessous pour alléger le fichier, sans perte visible sur un GIF
+# animé.
 COULEURS_GIF = 128
 
 # Nombre d'images qui servent à construire la palette. Mesuré : passer de 8 à
 # 50 images ne bouge pas l'écart de couleur d'un centième. Le reliquat n'est pas
 # un défaut d'échantillonnage mais une limite structurelle — chaque image prise
-# isolément tient sous 256 couleurs, leur union sur tout le segment non.
+# isolément tient sous le budget de la palette, leur union sur tout le
+# segment non.
 IMAGES_ANALYSE = 16
 
 # Largeur maximale des images d'analyse.
@@ -133,7 +135,7 @@ def instants_analyse(duree: float, fps: int, nb: int = IMAGES_ANALYSE) -> list[f
 
 
 def construire_palette(echantillon: Sequence[Image.Image]) -> Image.Image:
-    """Palette unique de 256 couleurs, déduite d'un échantillon d'images.
+    """Palette unique (COULEURS_GIF couleurs) déduite d'un échantillon d'images.
 
     Les images sont empilées en un montage vertical puis quantifiées d'un seul
     bloc : c'est ce qui garantit UNE palette pour tout le GIF et non une par
@@ -151,7 +153,8 @@ def construire_palette(echantillon: Sequence[Image.Image]) -> Image.Image:
         aplats         :  identique
 
     FASTOCTREE reste écarté : plus léger encore, mais il n'alloue que ~109
-    couleurs sur 256 sur un dégradé continu et y produit des bandes visibles.
+    couleurs sur les 256 alors demandées, sur un dégradé continu, et y produit
+    des bandes visibles.
 
     L'affinage par k-moyennes n'est PAS optionnel (cf. KMEANS_AFFINAGE) : sans
     lui MAXCOVERAGE descend à 6,67 Mo mais tache les zones texturées et pose une
@@ -221,9 +224,9 @@ def _reduire(image: Image.Image) -> Image.Image:
     couleurs présentes » — est faux : elle y reste, mais elle la rétracte.
 
     Contrepartie assumée : le sous-échantillonnage peut manquer une couleur rare
-    n'occupant que quelques pixels. Sur une palette de 256 entrées destinée à
-    tout un segment, une teinte aussi marginale n'aurait de toute façon pas
-    obtenu d'entrée.
+    n'occupant que quelques pixels. Sur une palette de COULEURS_GIF entrées
+    destinée à tout un segment, une teinte aussi marginale n'aurait de toute
+    façon pas obtenu d'entrée.
     """
     if image.width <= LARGEUR_ANALYSE:
         return image
